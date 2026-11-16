@@ -377,15 +377,11 @@ create policy "Shop owners create their sale items" on public.sale_items
 
 -- Employees (linked in shop_users) can read their shop's products and sales,
 -- and create sales, but not manage inventory or suppliers.
+-- Shop members read products and sales through their own shop_users rows.
+-- Reading the shops row itself is owner-only (owner_id = auth.uid()).
+-- A shops policy that references shop_users recurses with the shop_users
+-- policy that references shops, causing "infinite recursion detected".
 drop policy if exists "Shop members read their shop" on public.shops;
-create policy "Shop members read their shop" on public.shops
-  for select to authenticated using (
-    owner_id = auth.uid()
-    or exists (
-      select 1 from public.shop_users
-      where shop_users.shop_id = shops.id and shop_users.user_id = auth.uid()
-    )
-  );
 
 drop policy if exists "Shop members read products" on public.products;
 create policy "Shop members read products" on public.products
