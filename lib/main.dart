@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'pages/add_product_page.dart';
+import 'pages/employees_page.dart';
 import 'pages/expenses_page.dart';
 import 'pages/home_page.dart';
 import 'pages/inventory_page.dart' show InventoryPage, routeObserver;
