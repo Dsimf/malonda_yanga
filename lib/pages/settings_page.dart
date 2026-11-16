@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/api_client.dart';
+import '../services/urban7_branding.dart';
 import '../widgets/shop_dialogs.dart';
 import '../widgets/shop_ui.dart';
 
@@ -103,6 +104,18 @@ class _SettingsPageState extends State<SettingsPage> {
                       onTap: () => Navigator.pushNamed(context, '/suppliers'),
                     ),
                     _SettingTile(
+                      icon: Icons.payments_outlined,
+                      title: 'Operating Expenses',
+                      subtitle: 'Salaries, rent, transport, GRZ taxes',
+                      onTap: () => Navigator.pushNamed(context, '/expenses'),
+                    ),
+                    _SettingTile(
+                      icon: Icons.admin_panel_settings_outlined,
+                      title: 'Staff & Access',
+                      subtitle: 'Employee logins — Sales & Daily Sales only',
+                      onTap: () => Navigator.pushNamed(context, '/employees'),
+                    ),
+                    _SettingTile(
                       icon: Icons.schedule_rounded,
                       title: 'Layby Sales',
                       subtitle: 'Track customers paying on layby',
@@ -134,8 +147,8 @@ class _SettingsPageState extends State<SettingsPage> {
                       subtitle: 'Version 1.0.0 • Supabase-connected account',
                       onTap: () => showAboutDialog(
                         context: context,
-                        applicationName: 'Clothing Shop Manager',
-                        applicationVersion: '1.0.0',
+                        applicationName: Urban7.appName,
+                        applicationVersion: Urban7.companyName,
                       ),
                       last: true,
                     ),
@@ -212,8 +225,8 @@ class _SettingsHeader extends StatelessWidget {
       children: [
         const Expanded(
           child: Text(
-            'Clothing Shop\nManager',
-            style: TextStyle(
+            '${Urban7.appName}\n${Urban7.companyName}',
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 19,
               height: 1.15,

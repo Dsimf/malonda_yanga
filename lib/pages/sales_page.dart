@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/api_client.dart';
+import '../services/urban7_branding.dart';
 import '../widgets/barcode_scanner.dart';
 import '../widgets/shop_dialogs.dart';
 import '../widgets/shop_ui.dart';
@@ -21,12 +22,16 @@ class _SalesPageState extends State<SalesPage> {
   final Map<String, _CartLine> _cart = {};
   List<_SaleProduct> _products = [];
   String _paymentMethod = 'Cash';
+  String _saleType = 'Walk-in';
+  String _discountType = 'percent'; // 'percent' or 'value'
   double _laybyDeposit = 0;
   double _discountPercent = 0;
+  double _discountValue = 0;
   bool _loading = true;
   bool _completing = false;
   String? _errorMessage;
   String? _pendingProductId;
+  String _receiptCustomerName = '';
 
   int get _itemCount =>
       _cart.values.fold(0, (total, item) => total + item.quantity);
@@ -34,7 +39,9 @@ class _SalesPageState extends State<SalesPage> {
     final product = _productForId(item.key);
     return total + ((product.price * item.value.quantity).round());
   });
-  int get _discountAmount => (_subtotal * _discountPercent / 100).round();
+  int get _discountAmount => _discountType == 'value'
+      ? _discountValue.round().clamp(0, _subtotal)
+      : (_subtotal * _discountPercent / 100).round();
   int get _total => _subtotal - _discountAmount;
   int get _laybyBalance =>
       _paymentMethod == 'Layby' ? (_total - _laybyDeposit.round()).clamp(0, _total) : 0;
@@ -297,19 +304,36 @@ class _SalesPageState extends State<SalesPage> {
               _OrderSummary(
                 itemCount: _itemCount,
                 subtotal: _subtotal,
+                discountType: _discountType,
                 discountPercent: _discountPercent,
+                discountValue: _discountValue,
                 discountAmount: _discountAmount,
                 total: _total,
                 paymentMethod: _paymentMethod,
+                saleType: _saleType,
+                customerName: _receiptCustomerName,
                 discountController: _discountController,
-                onDiscountChanged: (value) {
+                onDiscountChanged: (type, value) {
                   setState(() {
-                    _discountPercent = (double.tryParse(value) ?? 0).clamp(
-                      0,
-                      100,
-                    );
+                    if (type == 'value') {
+                      _discountValue = (double.tryParse(value) ?? 0).clamp(
+                        0,
+                        _subtotal.toDouble(),
+                      );
+                    } else {
+                      _discountPercent = (double.tryParse(value) ?? 0).clamp(
+                        0,
+                        100,
+                      );
+                    }
                   });
                 },
+                onDiscountTypeChanged: (type) =>
+                    setState(() => _discountType = type),
+                onSaleTypeChanged: (type) =>
+                    setState(() => _saleType = type),
+                onCustomerNameChanged: (name) =>
+                    _receiptCustomerName = name,
                 onPaymentChanged: (method) =>
                     setState(() => _paymentMethod = method),
                 laybyBalance: _laybyBalance,
@@ -379,7 +403,7 @@ class _SalesPageState extends State<SalesPage> {
   }
 
   Future<void> _completeSale() async {
-    String customerName = '';
+    String customerName = _receiptCustomerName.trim();
     String customerPhone = '';
     if (_paymentMethod == 'Layby') {
       final confirmed = await showDialog<bool>(
@@ -402,12 +426,13 @@ class _SalesPageState extends State<SalesPage> {
     try {
       final result = await ApiClient.createSale({
         'discount_percent': _discountPercent,
+        'discount_type': _discountType,
+        'discount_value': _discountValue,
         'payment_method': _paymentMethod,
-        if (_paymentMethod == 'Layby') ...{
-          'layby_deposit': _laybyDeposit.round(),
-          'customer_name': customerName,
-          'customer_phone': customerPhone,
-        },
+        'sale_type': _saleType,
+        if (_paymentMethod == 'Layby') 'layby_deposit': _laybyDeposit.round(),
+        'customer_name': customerName,
+        if (_paymentMethod == 'Layby') 'customer_phone': customerPhone,
         'items': _cart.entries
             .map(
               (item) => {
@@ -428,6 +453,8 @@ class _SalesPageState extends State<SalesPage> {
           'discount': (result['discount'] as num).round(),
           'total': (result['total'] as num).round(),
           'paymentMethod': _paymentMethod,
+          'saleType': _saleType,
+          'customerName': customerName,
           'itemCount': _itemCount,
           'items': _cart.entries.map((item) {
             final product = _productForId(item.key);
@@ -779,21 +806,7 @@ class _ProductOptionsDialogState extends State<_ProductOptionsDialog> {
           key: const Key('saleSizeDropdown'),
           initialValue: _size,
           isExpanded: true,
-          items:
-              const [
-                    'S',
-                    'M',
-                    'L',
-                    'XL',
-                    'XXL',
-                    '28',
-                    '30',
-                    '32',
-                    '34',
-                    '36',
-                    '38',
-                    '40',
-                  ]
+          items: const [...Urban7.letterSizes, ...Urban7.numericSizes]
                   .map(
                     (size) => DropdownMenuItem(value: size, child: Text(size)),
                   )
@@ -1000,12 +1013,19 @@ class _OrderSummary extends StatelessWidget {
   const _OrderSummary({
     required this.itemCount,
     required this.subtotal,
+    required this.discountType,
     required this.discountPercent,
+    required this.discountValue,
     required this.discountAmount,
     required this.total,
     required this.discountController,
     required this.onDiscountChanged,
+    required this.onDiscountTypeChanged,
+    required this.onSaleTypeChanged,
+    required this.onCustomerNameChanged,
     required this.paymentMethod,
+    required this.saleType,
+    required this.customerName,
     required this.onPaymentChanged,
     required this.onComplete,
     this.laybyBalance = 0,
@@ -1014,12 +1034,19 @@ class _OrderSummary extends StatelessWidget {
 
   final int itemCount;
   final int subtotal;
+  final String discountType;
   final double discountPercent;
+  final double discountValue;
   final int discountAmount;
   final int total;
   final TextEditingController discountController;
-  final ValueChanged<String> onDiscountChanged;
+  final void Function(String type, String value) onDiscountChanged;
+  final ValueChanged<String> onDiscountTypeChanged;
+  final ValueChanged<String> onSaleTypeChanged;
+  final ValueChanged<String> onCustomerNameChanged;
   final String paymentMethod;
+  final String saleType;
+  final String customerName;
   final ValueChanged<String> onPaymentChanged;
   final VoidCallback? onComplete;
   final int laybyBalance;
@@ -1100,6 +1127,70 @@ class _OrderSummary extends StatelessWidget {
           children: [
             const Expanded(
               child: Text(
+                'Sale Type',
+                style: TextStyle(
+                  color: ShopColors.text,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                key: const Key('saleTypeDropdown'),
+                initialValue: saleType,
+                isExpanded: true,
+                items: Urban7.saleTypes
+                    .map(
+                      (type) => DropdownMenuItem(value: type, child: Text(type)),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  if (value != null) onSaleTypeChanged(value);
+                },
+                decoration: InputDecoration(
+                  isDense: true,
+                  filled: true,
+                  fillColor: ShopColors.pale,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(9),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          key: const Key('receiptCustomerNameField'),
+          onChanged: onCustomerNameChanged,
+          decoration: InputDecoration(
+            labelText: 'Customer name on receipt (optional)',
+            hintText: 'Appears on the receipt',
+            prefixIcon: const Icon(
+              Icons.receipt_long_rounded,
+              size: 19,
+              color: ShopColors.primary,
+            ),
+            isDense: true,
+            filled: true,
+            fillColor: ShopColors.pale,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(9),
+              borderSide: BorderSide.none,
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
                 'Discount',
                 style: TextStyle(
                   color: ShopColors.text,
@@ -1109,18 +1200,53 @@ class _OrderSummary extends StatelessWidget {
               ),
             ),
             SizedBox(
+              width: 132,
+              height: 42,
+              child: DropdownButtonFormField<String>(
+                key: const Key('discountTypeDropdown'),
+                initialValue: discountType == 'value'
+                    ? 'Kwacha Value (K)'
+                    : 'Percentage (%)',
+                isExpanded: true,
+                items: const [
+                  DropdownMenuItem(value: 'Percentage (%)', child: Text('Percentage (%)')),
+                  DropdownMenuItem(value: 'Kwacha Value (K)', child: Text('Kwacha Value (K)')),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  onDiscountTypeChanged(
+                    value == 'Kwacha Value (K)' ? 'value' : 'percent',
+                  );
+                },
+                decoration: InputDecoration(
+                  isDense: true,
+                  filled: true,
+                  fillColor: ShopColors.pale,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(9),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            SizedBox(
               width: 104,
               height: 42,
               child: TextField(
                 key: const Key('discountPercentField'),
                 controller: discountController,
-                onChanged: onDiscountChanged,
+                onChanged: (value) => onDiscountChanged(discountType, value),
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),
                 textAlign: TextAlign.end,
                 decoration: InputDecoration(
-                  suffixText: '%',
+                  suffixText: discountType == 'value' ? 'K' : '%',
                   hintText: '0',
                   filled: true,
                   fillColor: ShopColors.pale,
@@ -1157,7 +1283,9 @@ class _OrderSummary extends StatelessWidget {
           children: [
             Expanded(
               child: Text(
-                'Discount (${discountPercent.toStringAsFixed(discountPercent % 1 == 0 ? 0 : 2)}%)',
+                discountType == 'value'
+                    ? 'Discount (K${discountValue.toStringAsFixed(discountValue % 1 == 0 ? 0 : 2)})'
+                    : 'Discount (${discountPercent.toStringAsFixed(discountPercent % 1 == 0 ? 0 : 2)}%)',
                 style: const TextStyle(color: ShopColors.green, fontSize: 12),
               ),
             ),
@@ -1509,3 +1637,4 @@ class _EmptyCart extends StatelessWidget {
     ),
   );
 }
+

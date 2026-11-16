@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'pages/add_product_page.dart';
+import 'pages/expenses_page.dart';
 import 'pages/home_page.dart';
 import 'pages/inventory_page.dart' show InventoryPage, routeObserver;
 import 'pages/layby_page.dart';
@@ -12,17 +13,18 @@ import 'pages/sales_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/shop_registration_page.dart';
 import 'pages/suppliers_page.dart';
+import 'services/urban7_branding.dart';
 import 'widgets/shop_ui.dart';
 
-void main() => runApp(const MalondaYangaApp());
+void main() => runApp(const Urban7App());
 
-class MalondaYangaApp extends StatelessWidget {
-  const MalondaYangaApp({super.key});
+class Urban7App extends StatelessWidget {
+  const Urban7App({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Clothing Shop Manager',
+      title: Urban7.appName,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
@@ -93,6 +95,8 @@ class MalondaYangaApp extends StatelessWidget {
         '/reports': (_) => const ReportsPage(),
         '/settings': (_) => const SettingsPage(),
         '/suppliers': (_) => const SuppliersPage(),
+        '/expenses': (_) => const ExpensesPage(),
+        '/employees': (_) => const EmployeesPage(),
       },
     );
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/api_client.dart';
+import '../services/urban7_branding.dart';
 import '../widgets/shop_ui.dart';
 
 class LandingPage extends StatefulWidget {
@@ -125,17 +126,18 @@ class _LandingHeader extends StatelessWidget {
           width: 36,
           height: 36,
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.bottomLeft,
-              end: Alignment.topRight,
-              colors: [ShopColors.orange, Color(0xFFF59E0B)],
-            ),
+            color: Colors.white,
             borderRadius: BorderRadius.circular(12),
           ),
-          child: const Icon(
-            Icons.checkroom_rounded,
-            color: Colors.white,
-            size: 20,
+          clipBehavior: Clip.antiAlias,
+          child: Image.asset(
+            Urban7.logoAsset,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => const Icon(
+              Icons.checkroom_rounded,
+              color: Colors.white,
+              size: 20,
+            ),
           ),
         ),
         const SizedBox(width: 10),
@@ -146,7 +148,7 @@ class _LandingHeader extends StatelessWidget {
               Row(
                 children: [
                   Text(
-                    'ShopManager',
+                    Urban7.appName,
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 14,
@@ -561,7 +563,7 @@ class _LandingActions extends StatelessWidget {
           ),
           const SizedBox(height: 7),
           const Text(
-            '© ShopManager POS Zambia • Built for African Fashion Retailers',
+            '© ${Urban7.companyName} • ${Urban7.email}',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: Color(0xB3F2F4F8),

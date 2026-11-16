@@ -1,6 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
-
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
@@ -18,12 +16,10 @@ class ApiException implements Exception {
 class ApiClient {
   ApiClient._();
 
-  static const _configuredBaseUrl = String.fromEnvironment('API_BASE_URL');
-  static final _baseUrl = _configuredBaseUrl.isNotEmpty
-      ? _configuredBaseUrl
-      : Platform.isAndroid
-      ? 'http://192.168.0.100:8000'
-      : 'http://localhost:8000';
+  static const _baseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'https://malonda-yanga.onrender.com',
+  );
   static const _storage = FlutterSecureStorage();
   static http.Client _httpClient = http.Client();
   static String? _accessToken;
@@ -198,6 +194,45 @@ class ApiClient {
   ) async =>
       (await _send('PATCH', '/settings', body: data)) as Map<String, dynamic>;
 
+  static Future<List<Map<String, dynamic>>> expenses({
+    required DateTime start,
+    required DateTime end,
+  }) async => ((await _send(
+    'GET',
+    '/expenses',
+    query: {'start_date': _dateOnly(start), 'end_date': _dateOnly(end)},
+  )) as List)
+      .cast<Map<String, dynamic>>();
+
+  static Future<Map<String, dynamic>> createExpense(
+    Map<String, Object?> data,
+  ) async => (await _send('POST', '/expenses', body: data)) as Map<String, dynamic>;
+
+  static Future<void> deleteExpense(String id) async {
+    await _send('DELETE', '/expenses/$id');
+  }
+
+  static Future<List<Map<String, dynamic>>> employees() async =>
+      ((await _send('GET', '/employees')) as List).cast<Map<String, dynamic>>();
+
+  static Future<Map<String, dynamic>> createEmployee({
+    required String displayName,
+    required String email,
+    required String password,
+  }) async => (await _send(
+    'POST',
+    '/employees',
+    body: {
+      'display_name': displayName,
+      'email': email,
+      'password': password,
+    },
+  )) as Map<String, dynamic>;
+
+  static Future<void> deleteEmployee(String id) async {
+    await _send('DELETE', '/employees/$id');
+  }
+
   static Future<dynamic> _send(
     String method,
     String path, {
@@ -225,8 +260,6 @@ class ApiClient {
     try {
       final streamedResponse = await _httpClient.send(request);
       response = await http.Response.fromStream(streamedResponse);
-    } on SocketException catch (error) {
-      throw ApiException('Could not reach the API at $_baseUrl: $error', 0);
     } on http.ClientException catch (error) {
       throw ApiException('The API request failed: $error', 0);
     }

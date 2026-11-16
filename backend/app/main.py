@@ -163,13 +163,53 @@ class SaleItem(BaseModel):
     color: str | None = None
 
 
+SALE_TYPES = ("Online", "Walk-in")
+
+
+class ExpenseCreate(BaseModel):
+    category: Literal["Salaries", "Rent", "Food", "Transport", "GRZ Taxes", "Other"]
+    amount: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
+    note: str = Field(default="", max_length=240)
+    spent_on: date | None = None
+
+
+class ExpenseUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    category: Literal[
+        "Salaries", "Rent", "Food", "Transport", "GRZ Taxes", "Other"
+    ] | None = None
+    amount: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=2)
+    note: str | None = Field(default=None, max_length=240)
+    spent_on: date | None = None
+
+
+class EmployeeCreate(BaseModel):
+    display_name: str = Field(min_length=1, max_length=160)
+    email: str
+    password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", normalized):
+            raise ValueError("Enter a valid email address.")
+        return normalized
+
+
 class LaybyPayment(BaseModel):
     amount: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
 
 
 class SaleCreate(BaseModel):
     discount_percent: Decimal = Field(default=Decimal(0), ge=0, le=100)
+    discount_type: Literal["percent", "value"] = "percent"
+    discount_value: Decimal = Field(
+        default=Decimal(0), ge=0, max_digits=12, decimal_places=2
+    )
     payment_method: str = Field(min_length=1, max_length=80)
+    sale_type: Literal["Online", "Walk-in"] = "Walk-in"
     items: list[SaleItem] = Field(min_length=1)
     layby_deposit: Decimal = Field(default=Decimal(0), ge=0, max_digits=12, decimal_places=2)
     customer_name: str = Field(default="", max_length=160)
@@ -883,7 +923,10 @@ async def create_sale(
         body={
             "p_shop_id": shop["id"],
             "p_discount_percent": str(data.discount_percent),
+            "p_discount_type": data.discount_type,
+            "p_discount_value": str(data.discount_value),
             "p_payment_method": data.payment_method,
+            "p_sale_type": data.sale_type,
             "p_items": [item.model_dump(exclude_none=True) for item in data.items],
             "p_layby_deposit": str(data.layby_deposit),
             "p_customer_name": data.customer_name.strip(),
@@ -1155,12 +1198,36 @@ async def reports(
         summary["revenue"] += price * quantity
         total_cost += cost * quantity
 
+    expenses = await _table(
+        "GET",
+        "expenses",
+        token,
+        params={
+            "select": "category,amount",
+            "shop_id": f"eq.{shop['id']}",
+            "and": (
+                f"(spent_on.gte.{start_date},spent_on.lte.{end_date})"
+            ),
+        },
+    )
+    expense_by_category: dict[str, float] = {}
+    for expense in expenses:
+        category = str(expense.get("category") or "Other")
+        expense_by_category[category] = (
+            expense_by_category.get(category, 0.0) + float(expense["amount"])
+        )
+    total_expenses = round(sum(expense_by_category.values()), 2)
+    gross_profit = round(total_sales - total_cost, 2)
+
     return {
         "sales": sales,
         "items": lines,
         "total_sales": total_sales,
         "total_cost": total_cost,
-        "net_profit": total_sales - total_cost,
+        "gross_profit": gross_profit,
+        "total_expenses": total_expenses,
+        "expense_breakdown": expense_by_category,
+        "net_profit": round(gross_profit - total_expenses, 2),
         "sale_count": len(sales),
         "payment_totals": payment_totals,
         "daily_totals": [
@@ -1204,3 +1271,192 @@ async def update_settings(
         raise HTTPException(status_code=502, detail="Supabase did not update shop settings.")
     _shop_cache[user["id"]] = rows[0]  # keep cache in sync with the update
     return rows[0]
+
+
+EXPENSE_CATEGORIES = ("Salaries", "Rent", "Food", "Transport", "GRZ Taxes", "Other")
+
+
+@app.get("/expenses")
+async def list_expenses(
+    start_date: date = Query(),
+    end_date: date = Query(),
+    user: dict[str, Any] = Depends(current_user),
+    token: str = Depends(_bearer_token),
+) -> list[dict[str, Any]]:
+    shop = await _owned_shop(user, token)
+    return await _table(
+        "GET",
+        "expenses",
+        token,
+        params={
+            "select": "*",
+            "shop_id": f"eq.{shop['id']}",
+            "and": f"(spent_on.gte.{start_date},spent_on.lte.{end_date})",
+            "order": "spent_on.desc",
+        },
+    )
+
+
+@app.post("/expenses")
+async def create_expense(
+    data: ExpenseCreate,
+    user: dict[str, Any] = Depends(current_user),
+    token: str = Depends(_bearer_token),
+) -> dict[str, Any]:
+    shop = await _owned_shop(user, token)
+    rows = await _table(
+        "POST",
+        "expenses",
+        token,
+        params={"select": "*"},
+        body={
+            "shop_id": shop["id"],
+            "category": data.category,
+            "amount": str(data.amount),
+            "note": data.note.strip(),
+            "spent_on": (data.spent_on or date.today()).isoformat(),
+        },
+    )
+    if not rows:
+        raise HTTPException(status_code=502, detail="Supabase did not save the expense.")
+    return rows[0]
+
+
+@app.patch("/expenses/{expense_id}")
+async def update_expense(
+    expense_id: str,
+    data: ExpenseUpdate,
+    user: dict[str, Any] = Depends(current_user),
+    token: str = Depends(_bearer_token),
+) -> dict[str, Any]:
+    shop = await _owned_shop(user, token)
+    updates = data.model_dump(exclude_unset=True, mode="json")
+    if not updates:
+        raise HTTPException(status_code=422, detail="Provide at least one expense field.")
+    rows = await _table(
+        "PATCH",
+        "expenses",
+        token,
+        params={"id": f"eq.{expense_id}", "shop_id": f"eq.{shop['id']}", "select": "*"},
+        body=updates,
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Expense not found.")
+    return rows[0]
+
+
+@app.delete("/expenses/{expense_id}")
+async def delete_expense(
+    expense_id: str,
+    user: dict[str, Any] = Depends(current_user),
+    token: str = Depends(_bearer_token),
+) -> dict[str, bool]:
+    shop = await _owned_shop(user, token)
+    rows = await _table(
+        "DELETE",
+        "expenses",
+        token,
+        params={"id": f"eq.{expense_id}", "shop_id": f"eq.{shop['id']}", "select": "id"},
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Expense not found.")
+    return {"deleted": True}
+
+
+@app.get("/employees")
+async def list_employees(
+    user: dict[str, Any] = Depends(current_user),
+    token: str = Depends(_bearer_token),
+) -> list[dict[str, Any]]:
+    """Employees of this shop (shop_users rows joined with their shop)."""
+    shop = await _owned_shop(user, token)
+    return await _table(
+        "GET",
+        "shop_users",
+        token,
+        params={
+            "select": "id,user_id,role,display_name,created_at",
+            "shop_id": f"eq.{shop['id']}",
+            "order": "created_at.asc",
+        },
+    )
+
+
+@app.post("/employees")
+async def create_employee(
+    data: EmployeeCreate,
+    user: dict[str, Any] = Depends(current_user),
+    token: str = Depends(_bearer_token),
+) -> dict[str, Any]:
+    """Creates a Supabase auth user with the employee role for this shop."""
+    shop = await _owned_shop(user, token)
+    payload = await supabase_request(
+        "POST",
+        "/auth/v1/admin/users",
+        token=token,
+        body={
+            "email": data.email,
+            "password": data.password,
+            "email_confirm": True,
+            "user_metadata": {
+                "shop_id": shop["id"],
+                "role": "employee",
+                "display_name": data.display_name,
+            },
+        },
+    )
+    if not isinstance(payload, dict) or not payload.get("id"):
+        raise HTTPException(status_code=502, detail="Supabase did not create the employee.")
+    rows = await _table(
+        "POST",
+        "shop_users",
+        token,
+        params={"select": "*"},
+        body={
+            "shop_id": shop["id"],
+            "user_id": payload["id"],
+            "role": "employee",
+            "display_name": data.display_name,
+        },
+    )
+    if not rows:
+        raise HTTPException(status_code=502, detail="Supabase did not save the employee.")
+    return rows[0]
+
+
+@app.delete("/employees/{employee_id}")
+async def delete_employee(
+    employee_id: str,
+    user: dict[str, Any] = Depends(current_user),
+    token: str = Depends(_bearer_token),
+) -> dict[str, bool]:
+    shop = await _owned_shop(user, token)
+    rows = await _table(
+        "GET",
+        "shop_users",
+        token,
+        params={
+            "select": "id,user_id",
+            "id": f"eq.{employee_id}",
+            "shop_id": f"eq.{shop['id']}",
+            "role": "eq.employee",
+            "limit": "1",
+        },
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Employee not found.")
+    try:
+        await supabase_request(
+            "DELETE",
+            f"/auth/v1/admin/users/{rows[0]['user_id']}",
+            token=token,
+        )
+    except HTTPException:
+        pass  # keep the row removal authoritative even if auth cleanup fails
+    await _table(
+        "DELETE",
+        "shop_users",
+        token,
+        params={"id": f"eq.{employee_id}", "shop_id": f"eq.{shop['id']}", "select": "id"},
+    )
+    return {"deleted": True}

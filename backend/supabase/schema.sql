@@ -44,6 +44,13 @@ create table if not exists public.products (
 alter table public.products
   add column if not exists image_url text not null default '';
 
+-- Supplier recorded against each product for reorders.
+alter table public.products
+  add column if not exists supplier_name text not null default '';
+
+alter table public.products
+  add column if not exists unit_cost numeric(12, 2) not null default 0;
+
 create table if not exists public.suppliers (
   id uuid primary key default gen_random_uuid(),
   shop_id uuid not null references public.shops(id) on delete cascade,
@@ -77,6 +84,40 @@ alter table public.sales
   add column if not exists layby_settled boolean not null default false,
   add column if not exists customer_name text not null default '',
   add column if not exists customer_phone text not null default '';
+
+-- Online vs walk-in channel recorded on every sale.
+alter table public.sales
+  add column if not exists sale_type text not null default 'Walk-in';
+
+alter table public.sales
+  add column if not exists sale_channel text not null default 'Walk-in';
+
+-- Operating expenses feeding the net-profit report.
+create table if not exists public.expenses (
+  id uuid primary key default gen_random_uuid(),
+  shop_id uuid not null references public.shops(id) on delete cascade,
+  category text not null,
+  amount numeric(12, 2) not null check (amount > 0),
+  note text not null default '',
+  spent_on date not null default current_date,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists expenses_shop_period_idx on public.expenses (shop_id, spent_on);
+
+-- Owner vs employee access. Employees get Sales + Daily Sales only.
+create table if not exists public.shop_users (
+  id uuid primary key default gen_random_uuid(),
+  shop_id uuid not null references public.shops(id) on delete cascade,
+  user_id uuid not null unique references auth.users(id) on delete cascade,
+  role text not null default 'employee' check (role in ('owner', 'employee')),
+  display_name text not null default '',
+  created_at timestamptz not null default now()
+);
+
+insert into public.shop_users (shop_id, user_id, role, display_name)
+select id, owner_id, 'owner', owner_name from public.shops
+on conflict (user_id) do nothing;
 
 create index if not exists sales_open_layby_idx on public.sales (shop_id)
   where layby_balance > 0 and not layby_settled;
@@ -124,13 +165,20 @@ alter table public.suppliers enable row level security;
 alter table public.sales enable row level security;
 alter table public.sale_items enable row level security;
 alter table public.layby_payments enable row level security;
+alter table public.expenses enable row level security;
+alter table public.shop_users enable row level security;
 
 grant usage on schema public to authenticated;
 grant select, insert, update on public.shops to authenticated;
 grant select, insert, update, delete on public.products to authenticated;
 grant select, insert, update, delete on public.suppliers to authenticated;
 grant select, insert, update on public.sales, public.sale_items to authenticated;
+grant select, insert, update, delete on public.expenses to authenticated;
 grant select, insert on public.layby_payments to authenticated;
+
+-- Owner-only management happens through the service role via the API;
+-- employees need read on shop_users to know their own role.
+grant select on public.shop_users to authenticated;
 
 drop policy if exists "Shop owners manage layby payments" on public.layby_payments;
 create policy "Shop owners manage layby payments" on public.layby_payments
@@ -217,6 +265,23 @@ create policy "Shop owners manage their suppliers" on public.suppliers
 insert into storage.buckets (id, name, public)
 values ('product-images', 'product-images', true)
 on conflict (id) do update set public = true;
+
+-- ---------------- Expense policies (owner-only via the shops owner link) ----
+drop policy if exists "Shop owners manage expenses" on public.expenses;
+create policy "Shop owners manage expenses" on public.expenses
+  for all to authenticated
+  using (
+    exists (
+      select 1 from public.shops
+      where shops.id = expenses.shop_id and shops.owner_id = auth.uid()
+    )
+  )
+  with check (
+    exists (
+      select 1 from public.shops
+      where shops.id = expenses.shop_id and shops.owner_id = auth.uid()
+    )
+  );
 
 drop policy if exists "Shop owners read product images" on storage.objects;
 create policy "Shop owners read product images" on storage.objects
@@ -310,6 +375,91 @@ create policy "Shop owners create their sale items" on public.sale_items
     )
   );
 
+-- Employees (linked in shop_users) can read their shop's products and sales,
+-- and create sales, but not manage inventory or suppliers.
+drop policy if exists "Shop members read their shop" on public.shops;
+create policy "Shop members read their shop" on public.shops
+  for select to authenticated using (
+    owner_id = auth.uid()
+    or exists (
+      select 1 from public.shop_users
+      where shop_users.shop_id = shops.id and shop_users.user_id = auth.uid()
+    )
+  );
+
+drop policy if exists "Shop members read products" on public.products;
+create policy "Shop members read products" on public.products
+  for select to authenticated using (
+    exists (
+      select 1 from public.shop_users
+      where shop_users.shop_id = products.shop_id and shop_users.user_id = auth.uid()
+    )
+  );
+
+drop policy if exists "Shop members read sales" on public.sales;
+create policy "Shop members read sales" on public.sales
+  for select to authenticated using (
+    exists (
+      select 1 from public.shop_users
+      where shop_users.shop_id = sales.shop_id and shop_users.user_id = auth.uid()
+    )
+  );
+
+drop policy if exists "Shop members create sales" on public.sales;
+create policy "Shop members create sales" on public.sales
+  for insert to authenticated with check (
+    exists (
+      select 1 from public.shop_users
+      where shop_users.shop_id = sales.shop_id and shop_users.user_id = auth.uid()
+    )
+  );
+
+drop policy if exists "Shop members read sale items" on public.sale_items;
+create policy "Shop members read sale items" on public.sale_items
+  for select to authenticated using (
+    exists (
+      select 1 from public.sales
+      join public.shop_users on shop_users.shop_id = sales.shop_id
+      where sales.id = sale_items.sale_id and shop_users.user_id = auth.uid()
+    )
+  );
+
+drop policy if exists "Shop members create sale items" on public.sale_items;
+create policy "Shop members create sale items" on public.sale_items
+  for insert to authenticated with check (
+    exists (
+      select 1 from public.sales
+      join public.shop_users on shop_users.shop_id = sales.shop_id
+      where sales.id = sale_items.sale_id and shop_users.user_id = auth.uid()
+    )
+  );
+
+drop policy if exists "Shop members read shop_users" on public.shop_users;
+create policy "Shop members read shop_users" on public.shop_users
+  for select to authenticated using (
+    user_id = auth.uid()
+    or exists (
+      select 1 from public.shops
+      where shops.id = shop_users.shop_id and shops.owner_id = auth.uid()
+    )
+  );
+
+drop policy if exists "Shop owners manage shop_users" on public.shop_users;
+create policy "Shop owners manage shop_users" on public.shop_users
+  for all to authenticated
+  using (
+    exists (
+      select 1 from public.shops
+      where shops.id = shop_users.shop_id and shops.owner_id = auth.uid()
+    )
+  )
+  with check (
+    exists (
+      select 1 from public.shops
+      where shops.id = shop_users.shop_id and shops.owner_id = auth.uid()
+    )
+  );
+
 create or replace function public.create_shop_sale(
   p_shop_id uuid,
   p_discount_percent numeric,
@@ -317,7 +467,10 @@ create or replace function public.create_shop_sale(
   p_items jsonb,
   p_layby_deposit numeric default 0,
   p_customer_name text default '',
-  p_customer_phone text default ''
+  p_customer_phone text default '',
+  p_discount_type text default 'percent',
+  p_discount_value numeric default 0,
+  p_sale_type text default 'Walk-in'
 ) returns jsonb
 language plpgsql
 security invoker
@@ -330,9 +483,13 @@ declare
   v_quantity integer;
   v_subtotal numeric(12, 2) := 0;
   v_discount numeric(12, 2);
+  v_sale_type text;
 begin
   if auth.uid() is null or not exists (
     select 1 from public.shops where id = p_shop_id and owner_id = auth.uid()
+  ) and not exists (
+    select 1 from public.shop_users
+    where shop_users.shop_id = p_shop_id and shop_users.user_id = auth.uid()
   ) then
     raise exception 'Shop not found for the signed-in user.';
   end if;
@@ -345,6 +502,10 @@ begin
   if coalesce(trim(p_payment_method), '') = '' then
     raise exception 'Payment method is required.';
   end if;
+  v_sale_type := case
+    when lower(coalesce(p_sale_type, '')) like 'online%' then 'Online'
+    else 'Walk-in'
+  end;
 
   for v_product in
     select products.*
@@ -381,14 +542,18 @@ begin
     raise exception 'Product not found in this shop.';
   end if;
 
-  v_discount := round(v_subtotal * p_discount_percent / 100, 2);
+  if p_discount_type = 'value' then
+    v_discount := least(round(greatest(p_discount_value, 0), 2), v_subtotal);
+  else
+    v_discount := round(v_subtotal * p_discount_percent / 100, 2);
+  end if;
   insert into public.sales (
-    shop_id, subtotal, discount, total, payment_method,
+    shop_id, subtotal, discount, total, payment_method, sale_type,
     layby_deposit, layby_balance, layby_settled,
     customer_name, customer_phone
   )
   values (
-    p_shop_id, v_subtotal, v_discount, v_subtotal - v_discount, p_payment_method,
+    p_shop_id, v_subtotal, v_discount, v_subtotal - v_discount, p_payment_method, v_sale_type,
     round(greatest(p_layby_deposit, 0), 2),
     case
       when lower(p_payment_method) = 'layby'
@@ -430,9 +595,9 @@ begin
 end;
 $$;
 
-revoke all on function public.create_shop_sale(uuid, numeric, text, jsonb, numeric, text, text)
+revoke all on function public.create_shop_sale(uuid, numeric, text, jsonb, numeric, text, text, text, numeric, text)
   from public, anon;
-grant execute on function public.create_shop_sale(uuid, numeric, text, jsonb, numeric, text, text)
+grant execute on function public.create_shop_sale(uuid, numeric, text, jsonb, numeric, text, text, text, numeric, text)
   to authenticated;
 
 -- Records a payment against an open layby sale, appends a row to
