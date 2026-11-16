@@ -1,0 +1,1206 @@
+from __future__ import annotations
+
+import base64
+import binascii
+import json
+from datetime import date, datetime, time, timedelta, timezone
+from decimal import Decimal
+from functools import lru_cache
+import re
+from typing import Any, Literal
+
+import httpx
+from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class _JsonEncoder(json.JSONEncoder):
+    """JSON encoder that understands Decimal (Postgres numeric columns)."""
+
+    def default(self, o: Any) -> Any:
+        if isinstance(o, Decimal):
+            return float(o)
+        return super().default(o)
+
+
+class Settings(BaseSettings):
+    supabase_url: str = "https://ceqxnujtapdkhomhiiby.supabase.co"
+    supabase_anon_key: str = "sb_publishable_ze1rjVQKXci6LgelzDG1oA_ydGUBSF1"
+    cors_origins: str = "http://localhost:3000,http://localhost:8080"
+    auth_redirect_url: str = "http://192.168.8.101:8000/auth/confirmed"
+    auth_recovery_redirect_url: str = "http://192.168.8.101:8000/auth/recovery"
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    @property
+    def origins(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
+
+
+# Short-lived caches so repeated authenticated calls don't re-verify the JWT
+# and re-fetch the shop row from Supabase on every request.
+_user_cache: dict[str, dict[str, Any]] = {}
+_shop_cache: dict[str, dict[str, Any]] = {}
+
+
+class ShopRegistration(BaseModel):
+    shop_name: str = Field(min_length=1, max_length=160)
+    owner_name: str = Field(min_length=1, max_length=160)
+    email: str
+    password: str = Field(min_length=8, max_length=128)
+    phone: str = Field(default="", max_length=40)
+    location: str = Field(min_length=1, max_length=160)
+    business_type: str = Field(min_length=1, max_length=100)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", normalized):
+            raise ValueError("Enter a valid email address.")
+        return normalized
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str = Field(min_length=1, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", normalized):
+            raise ValueError("Enter a valid email address.")
+        return normalized
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str = Field(min_length=1)
+
+
+class PasswordResetRequest(BaseModel):
+    email: str
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", normalized):
+            raise ValueError("Enter a valid email address.")
+        return normalized
+
+
+class PasswordUpdate(BaseModel):
+    password: str = Field(min_length=8, max_length=128)
+
+
+class ProductCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    category: str = Field(min_length=1, max_length=100)
+    sku: str = Field(min_length=1, max_length=80)
+    size: str = Field(default="", max_length=40)
+    color: str = Field(default="", max_length=80)
+    cost: Decimal = Field(ge=0, max_digits=12, decimal_places=2)
+    price: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
+    quantity: int = Field(ge=0)
+
+
+class ProductUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    category: str | None = Field(default=None, min_length=1, max_length=100)
+    sku: str | None = Field(default=None, min_length=1, max_length=80)
+    size: str | None = Field(default=None, max_length=40)
+    color: str | None = Field(default=None, max_length=80)
+    cost: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+    price: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=2)
+    quantity: int | None = Field(default=None, ge=0)
+
+
+class ProductImageUpload(BaseModel):
+    content_type: Literal["image/jpeg", "image/png", "image/webp"]
+    image_base64: str = Field(min_length=1, max_length=7_000_000)
+
+
+class SupplierCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    contact_name: str = Field(default="", max_length=160)
+    phone: str = Field(default="", max_length=40)
+    email: str = Field(default="", max_length=254)
+    address: str = Field(default="", max_length=240)
+    notes: str = Field(default="", max_length=1000)
+
+
+class SupplierUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    contact_name: str | None = Field(default=None, max_length=160)
+    phone: str | None = Field(default=None, max_length=40)
+    email: str | None = Field(default=None, max_length=254)
+    address: str | None = Field(default=None, max_length=240)
+    notes: str | None = Field(default=None, max_length=1000)
+
+
+class SaleItem(BaseModel):
+    product_id: str
+    quantity: int = Field(gt=0)
+    size: str | None = None
+    color: str | None = None
+
+
+class LaybyPayment(BaseModel):
+    amount: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
+
+
+class SaleCreate(BaseModel):
+    discount_percent: Decimal = Field(default=Decimal(0), ge=0, le=100)
+    payment_method: str = Field(min_length=1, max_length=80)
+    items: list[SaleItem] = Field(min_length=1)
+    layby_deposit: Decimal = Field(default=Decimal(0), ge=0, max_digits=12, decimal_places=2)
+    customer_name: str = Field(default="", max_length=160)
+    customer_phone: str = Field(default="", max_length=40)
+
+
+class ShopUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    owner_name: str | None = Field(default=None, min_length=1, max_length=160)
+    phone: str | None = Field(default=None, max_length=40)
+    location: str | None = Field(default=None, min_length=1, max_length=160)
+
+
+security = HTTPBearer(auto_error=False)
+app = FastAPI(title="Malonda Yanga API", version="1.0.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_settings().origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+def _configuration() -> tuple[str, str]:
+    config = get_settings()
+    url = config.supabase_url.rstrip("/")
+    key = config.supabase_anon_key.strip()
+    if not url.startswith("https://") or not url.endswith(".supabase.co"):
+        raise HTTPException(
+            status_code=503,
+            detail="Configure SUPABASE_URL with the Supabase project URL.",
+        )
+    if not key or key.startswith("sb_secret_"):
+        raise HTTPException(
+            status_code=503,
+            detail="Configure SUPABASE_ANON_KEY with a publishable/anon key.",
+        )
+    return url, key
+
+
+async def supabase_request(
+    method: str,
+    path: str,
+    *,
+    token: str | None = None,
+    params: dict[str, str] | None = None,
+    body: Any = None,
+) -> Any:
+    url, key = _configuration()
+    headers = {
+        "apikey": key,
+        "Authorization": f"Bearer {token or key}",
+    }
+    if method in {"POST", "PATCH", "DELETE"}:
+        headers["Prefer"] = "return=representation"
+
+    content: bytes | None = None
+    if body is not None:
+        # Pydantic Decimal fields (cost, price, etc.) are not JSON serializable
+        # by the stdlib encoder, so serialize them explicitly as numbers.
+        content = json.dumps(
+            body, ensure_ascii=False, separators=(",", ":"), cls=_JsonEncoder
+        ).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            response = await client.request(
+                method,
+                f"{url}/{path.lstrip('/')}",
+                headers=headers,
+                params=params,
+                content=content,
+            )
+    except httpx.TimeoutException as error:
+        raise HTTPException(
+            status_code=504,
+            detail="Supabase did not respond in time.",
+        ) from error
+    except httpx.RequestError as error:
+        raise HTTPException(
+            status_code=503,
+            detail="Could not connect to Supabase.",
+        ) from error
+
+    if response.is_error:
+        try:
+            detail = response.json()
+        except ValueError:
+            detail = response.text
+        if isinstance(detail, dict):
+            detail = (
+                detail.get("msg")
+                or detail.get("message")
+                or detail.get("error_description")
+                or detail.get("details")
+                or "Supabase request failed."
+            )
+        raise HTTPException(
+            status_code=response.status_code,
+            detail=str(detail),
+        )
+    if not response.content:
+        return None
+    try:
+        return response.json()
+    except ValueError as error:
+        raise HTTPException(
+            status_code=502,
+            detail="Supabase returned an invalid response.",
+        ) from error
+
+
+async def supabase_upload(
+    path: str,
+    *,
+    token: str,
+    content: bytes,
+    content_type: str,
+) -> None:
+    url, key = _configuration()
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(
+                f"{url}/storage/v1/object/{path.lstrip('/')}",
+                headers={
+                    "apikey": key,
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": content_type,
+                    "x-upsert": "true",
+                },
+                content=content,
+            )
+    except httpx.TimeoutException as error:
+        raise HTTPException(
+            status_code=504,
+            detail="Supabase Storage did not respond in time.",
+        ) from error
+    except httpx.RequestError as error:
+        raise HTTPException(
+            status_code=503,
+            detail="Could not connect to Supabase Storage.",
+        ) from error
+    if response.is_error:
+        try:
+            detail = response.json()
+        except ValueError:
+            detail = response.text
+        # Log the raw storage error so storage misconfigurations (wrong
+        # bucket name, RLS rejection, MIME rules) are visible in the server
+        # console instead of surfacing as an opaque 400.
+        print(f"Supabase Storage upload failed for '{path}': "
+              f"{response.status_code} {detail}", flush=True)
+        if isinstance(detail, dict):
+            detail = detail.get("message") or detail.get("error") or "Image upload failed."
+        raise HTTPException(status_code=response.status_code, detail=str(detail))
+
+
+async def current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+) -> dict[str, Any]:
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise HTTPException(status_code=401, detail="Sign in to continue.")
+
+    # Short-lived cache: each API call previously re-verified the JWT with a
+    # /auth/v1/user round-trip to Supabase, which tripled latency on every
+    # request. Tokens are stable for their lifetime, so a 60s per-token cache
+    # is safe and keeps consecutive page loads snappy.
+    cached = _user_cache.get(credentials.credentials)
+    if cached is not None:
+        return cached
+    try:
+        user = await supabase_request(
+            "GET",
+            "/auth/v1/user",
+            token=credentials.credentials,
+        )
+    except HTTPException as error:
+        # Supabase reports expired/malformed JWTs as 401 or 403 (e.g.
+        # error_code "bad_jwt"). Always surface those as 401 so clients
+        # know to refresh the session instead of treating it as a
+        # permissions problem.
+        if error.status_code in (401, 403):
+            raise HTTPException(status_code=401, detail="Session expired. Sign in again.") from error
+        raise
+    if not isinstance(user, dict) or not user.get("id"):
+        raise HTTPException(status_code=401, detail="Supabase returned no user.")
+    if len(_user_cache) > 512:
+        _user_cache.clear()
+    _user_cache[credentials.credentials] = user
+    return user
+
+
+def _session_response(payload: dict[str, Any], shop: dict[str, Any] | None) -> dict[str, Any]:
+    user = payload.get("user") or payload
+    session = payload.get("access_token") is not None
+    return {
+        "user": {"id": user.get("id"), "email": user.get("email")},
+        "shop": shop,
+        "access_token": payload.get("access_token"),
+        "refresh_token": payload.get("refresh_token"),
+        "requires_email_confirmation": not session,
+    }
+
+
+async def _shop_for_user(user: dict[str, Any], token: str) -> dict[str, Any]:
+    # Cache the shop row per user for a short window — the shop rarely changes
+    # and this removes a Supabase round-trip from every authenticated request.
+    cached = _shop_cache.get(user["id"])
+    if cached is not None:
+        return cached
+    rows = await supabase_request(
+        "GET",
+        "/rest/v1/shops",
+        token=token,
+        params={
+            "select": "*",
+            "owner_id": f"eq.{user['id']}",
+            "limit": "1",
+        },
+    )
+    if rows:
+        if len(_shop_cache) > 512:
+            _shop_cache.clear()
+        _shop_cache[user["id"]] = rows[0]
+        return rows[0]
+
+    metadata = user.get("user_metadata") or {}
+    required = ("shop_name", "owner_name", "location", "business_type")
+    if any(not metadata.get(key) for key in required):
+        raise HTTPException(
+            status_code=404,
+            detail="No shop is linked to this account. Register a shop first.",
+        )
+    created = await supabase_request(
+        "POST",
+        "/rest/v1/shops",
+        token=token,
+        params={"select": "*"},
+        body={
+            "owner_id": user["id"],
+            "name": metadata["shop_name"],
+            "owner_name": metadata["owner_name"],
+            "phone": metadata.get("phone") or "",
+            "location": metadata["location"],
+            "business_type": metadata["business_type"],
+        },
+    )
+    if not created:
+        raise HTTPException(status_code=502, detail="Supabase did not create the shop.")
+    return created[0]
+
+
+async def _owned_shop(user: dict[str, Any], token: str) -> dict[str, Any]:
+    return await _shop_for_user(user, token)
+
+
+async def _table(
+    method: str,
+    table: str,
+    token: str,
+    *,
+    params: dict[str, str] | None = None,
+    body: Any = None,
+) -> Any:
+    return await supabase_request(
+        method,
+        f"/rest/v1/{table}",
+        token=token,
+        params=params,
+        body=body,
+    )
+
+
+def _bearer_token(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+) -> str:
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise HTTPException(status_code=401, detail="Sign in to continue.")
+    return credentials.credentials
+
+
+@app.get("/health")
+async def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/auth/confirmed", response_class=HTMLResponse)
+async def auth_confirmed() -> str:
+    return """<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Email confirmation</title>
+  </head>
+  <body style="font: 16px system-ui, sans-serif; max-width: 34rem; margin: 15vh auto; padding: 1rem; color: #17211b">
+    <h1>Email confirmation link processed</h1>
+    <p>Return to Malonda Yanga and sign in with your email and password.</p>
+  </body>
+</html>"""
+
+
+@app.get("/auth/recovery", response_class=HTMLResponse)
+async def auth_recovery() -> str:
+    return """<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Reset password</title>
+  </head>
+  <body style="font: 16px system-ui, sans-serif; max-width: 34rem; margin: 12vh auto; padding: 1rem; color: #17211b">
+    <h1>Choose a new password</h1>
+    <form id="reset-form">
+      <label for="password">New password (at least 8 characters)</label><br>
+      <input id="password" type="password" minlength="8" required style="box-sizing: border-box; width: 100%; margin: .75rem 0; padding: .8rem">
+      <button style="padding: .7rem 1rem">Update password</button>
+    </form>
+    <p id="status" role="status"></p>
+    <script>
+      const statusText = document.getElementById('status');
+      document.getElementById('reset-form').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const accessToken = new URLSearchParams(location.hash.slice(1)).get('access_token');
+        if (!accessToken) {
+          statusText.textContent = 'This reset link is invalid or expired. Request a new one in the app.';
+          return;
+        }
+        try {
+          const response = await fetch('/auth/password', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${accessToken}`
+            },
+            body: JSON.stringify({ password: document.getElementById('password').value })
+          });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.detail || 'Could not update password.');
+          history.replaceState(null, '', location.pathname);
+          document.getElementById('reset-form').remove();
+          statusText.textContent = 'Password updated. Return to Malonda Yanga and sign in.';
+        } catch (error) {
+          statusText.textContent = error.message || 'Could not update password.';
+        }
+      });
+    </script>
+  </body>
+</html>"""
+
+
+@app.post("/auth/register")
+async def register(data: ShopRegistration) -> dict[str, Any]:
+    payload = await supabase_request(
+        "POST",
+        "/auth/v1/signup",
+        params={"redirect_to": get_settings().auth_redirect_url},
+        body={
+            "email": data.email,
+            "password": data.password,
+            "data": {
+                "shop_name": data.shop_name,
+                "owner_name": data.owner_name,
+                "phone": data.phone,
+                "location": data.location,
+                "business_type": data.business_type,
+            },
+        },
+    )
+    if not isinstance(payload, dict) or not payload.get("user", payload).get("id"):
+        raise HTTPException(status_code=502, detail="Supabase did not return a registered user.")
+    user = payload.get("user") or payload
+    shop = None
+    token = payload.get("access_token")
+    if token:
+        shop = await _shop_for_user(user, token)
+    return _session_response(payload, shop)
+
+
+@app.post("/auth/password/reset")
+async def request_password_reset(data: PasswordResetRequest) -> dict[str, bool]:
+    await supabase_request(
+        "POST",
+        "/auth/v1/recover",
+        params={"redirect_to": get_settings().auth_recovery_redirect_url},
+        body={"email": data.email},
+    )
+    return {"sent": True}
+
+
+@app.post("/auth/password")
+async def update_password(
+    data: PasswordUpdate,
+    _user: dict[str, Any] = Depends(current_user),
+    token: str = Depends(_bearer_token),
+) -> dict[str, bool]:
+    await supabase_request(
+        "PUT",
+        "/auth/v1/user",
+        token=token,
+        body={"password": data.password},
+    )
+    return {"updated": True}
+
+
+@app.post("/auth/login")
+async def login(data: LoginRequest) -> dict[str, Any]:
+    payload = await supabase_request(
+        "POST",
+        "/auth/v1/token",
+        params={"grant_type": "password"},
+        body={"email": data.email, "password": data.password},
+    )
+    if not isinstance(payload, dict) or not payload.get("user"):
+        raise HTTPException(status_code=502, detail="Supabase did not return a signed-in user.")
+    shop = await _shop_for_user(payload["user"], payload["access_token"])
+    return _session_response(payload, shop)
+
+
+@app.post("/auth/refresh")
+async def refresh(data: RefreshRequest) -> dict[str, Any]:
+    payload = await supabase_request(
+        "POST",
+        "/auth/v1/token",
+        params={"grant_type": "refresh_token"},
+        body={"refresh_token": data.refresh_token},
+    )
+    if not isinstance(payload, dict) or not payload.get("user"):
+        raise HTTPException(status_code=502, detail="Supabase did not refresh the session.")
+    return _session_response(payload, None)
+
+
+@app.get("/auth/me")
+async def me(
+    user: dict[str, Any] = Depends(current_user),
+    token: str = Depends(_bearer_token),
+) -> dict[str, Any]:
+    return {
+        "user": {"id": user["id"], "email": user.get("email")},
+        "shop": await _shop_for_user(user, token),
+    }
+
+
+@app.get("/products")
+async def products(
+    search: str | None = None,
+    user: dict[str, Any] = Depends(current_user),
+    token: str = Depends(_bearer_token),
+) -> list[dict[str, Any]]:
+    shop = await _owned_shop(user, token)
+    params = {
+        "select": "*",
+        "shop_id": f"eq.{shop['id']}",
+        "order": "created_at.desc",
+    }
+    if search and search.strip():
+        params["name"] = f"ilike.*{search.strip()}*"
+    return await _table("GET", "products", token, params=params)
+
+
+@app.post("/products")
+async def create_product(
+    data: ProductCreate,
+    user: dict[str, Any] = Depends(current_user),
+    token: str = Depends(_bearer_token),
+) -> dict[str, Any]:
+    shop = await _owned_shop(user, token)
+    rows = await _table(
+        "POST",
+        "products",
+        token,
+        params={"select": "*"},
+        body={**data.model_dump(mode="json"), "shop_id": shop["id"]},
+    )
+    if not rows:
+        raise HTTPException(status_code=502, detail="Supabase did not save the product.")
+    return rows[0]
+
+
+@app.patch("/products/{product_id}")
+async def update_product(
+    product_id: str,
+    data: ProductUpdate,
+    user: dict[str, Any] = Depends(current_user),
+    token: str = Depends(_bearer_token),
+) -> dict[str, Any]:
+    shop = await _owned_shop(user, token)
+    updates = data.model_dump(exclude_unset=True)
+    if not updates:
+        raise HTTPException(status_code=422, detail="Provide at least one product field.")
+    rows = await _table(
+        "PATCH",
+        "products",
+        token,
+        params={
+            "id": f"eq.{product_id}",
+            "shop_id": f"eq.{shop['id']}",
+            "select": "*",
+        },
+        body=updates,
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Product not found.")
+    return rows[0]
+
+
+@app.delete("/products/{product_id}")
+async def delete_product(
+    product_id: str,
+    user: dict[str, Any] = Depends(current_user),
+    token: str = Depends(_bearer_token),
+) -> dict[str, bool]:
+    shop = await _owned_shop(user, token)
+    rows = await _table(
+        "DELETE",
+        "products",
+        token,
+        params={
+            "id": f"eq.{product_id}",
+            "shop_id": f"eq.{shop['id']}",
+            "select": "id",
+        },
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Product not found.")
+    return {"deleted": True}
+
+
+@app.put("/products/{product_id}/image")
+async def upload_product_image(
+    product_id: str,
+    data: ProductImageUpload,
+    user: dict[str, Any] = Depends(current_user),
+    token: str = Depends(_bearer_token),
+) -> dict[str, str]:
+    shop = await _owned_shop(user, token)
+    products = await _table(
+        "GET",
+        "products",
+        token,
+        params={
+            "select": "id",
+            "id": f"eq.{product_id}",
+            "shop_id": f"eq.{shop['id']}",
+            "limit": "1",
+        },
+    )
+    if not products:
+        raise HTTPException(status_code=404, detail="Product not found.")
+    try:
+        image = base64.b64decode(data.image_base64, validate=True)
+    except (binascii.Error, ValueError) as error:
+        raise HTTPException(status_code=422, detail="The product image is invalid.") from error
+    if len(image) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Product images must be 5 MB or smaller.")
+
+    extension = {
+        "image/jpeg": "jpg",
+        "image/png": "png",
+        "image/webp": "webp",
+    }[data.content_type]
+    object_path = f"{shop['id']}/{product_id}.{extension}"
+    await supabase_upload(
+        f"product-images/{object_path}",
+        token=token,
+        content=image,
+        content_type=data.content_type,
+    )
+    config = get_settings()
+    image_url = (
+        f"{config.supabase_url.rstrip('/')}/storage/v1/object/public/"
+        f"product-images/{object_path}"
+    )
+    try:
+        rows = await _table(
+            "PATCH",
+            "products",
+            token,
+            params={
+                "id": f"eq.{product_id}",
+                "shop_id": f"eq.{shop['id']}",
+                "select": "id",
+            },
+            body={"image_url": image_url},
+        )
+    except HTTPException as error:
+        # A 400 from PostgREST here almost always means the live database
+        # is missing the products.image_url column (migration not run yet),
+        # even though the file itself landed in the bucket successfully.
+        # Make that obvious instead of a generic 400.
+        detail_text = str(error.detail)
+        if error.status_code == 400 and "image_url" in detail_text:
+            print(
+                "Missing products.image_url column: run "
+                "backend/supabase/schema.sql in the Supabase SQL editor.",
+                flush=True,
+            )
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "The image was saved to the bucket, but the products "
+                    "table has no image_url column. Run the latest "
+                    "backend/supabase/schema.sql migration in Supabase."
+                ),
+            ) from error
+        raise
+    if not rows:
+        raise HTTPException(status_code=404, detail="Product not found.")
+    return {"image_url": image_url}
+
+
+@app.get("/suppliers")
+async def suppliers(
+    user: dict[str, Any] = Depends(current_user),
+    token: str = Depends(_bearer_token),
+) -> list[dict[str, Any]]:
+    shop = await _owned_shop(user, token)
+    return await _table(
+        "GET",
+        "suppliers",
+        token,
+        params={
+            "select": "*",
+            "shop_id": f"eq.{shop['id']}",
+            "order": "name.asc",
+        },
+    )
+
+
+@app.post("/suppliers")
+async def create_supplier(
+    data: SupplierCreate,
+    user: dict[str, Any] = Depends(current_user),
+    token: str = Depends(_bearer_token),
+) -> dict[str, Any]:
+    shop = await _owned_shop(user, token)
+    rows = await _table(
+        "POST",
+        "suppliers",
+        token,
+        params={"select": "*"},
+        body={**data.model_dump(), "name": data.name.strip(), "shop_id": shop["id"]},
+    )
+    if not rows:
+        raise HTTPException(status_code=502, detail="Supabase did not save the supplier.")
+    return rows[0]
+
+
+@app.patch("/suppliers/{supplier_id}")
+async def update_supplier(
+    supplier_id: str,
+    data: SupplierUpdate,
+    user: dict[str, Any] = Depends(current_user),
+    token: str = Depends(_bearer_token),
+) -> dict[str, Any]:
+    shop = await _owned_shop(user, token)
+    updates = data.model_dump(exclude_unset=True)
+    if not updates:
+        raise HTTPException(status_code=422, detail="Provide at least one supplier field.")
+    if "name" in updates and updates["name"] is not None:
+        updates["name"] = updates["name"].strip()
+    rows = await _table(
+        "PATCH",
+        "suppliers",
+        token,
+        params={
+            "id": f"eq.{supplier_id}",
+            "shop_id": f"eq.{shop['id']}",
+            "select": "*",
+        },
+        body=updates,
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Supplier not found.")
+    return rows[0]
+
+
+@app.delete("/suppliers/{supplier_id}")
+async def delete_supplier(
+    supplier_id: str,
+    user: dict[str, Any] = Depends(current_user),
+    token: str = Depends(_bearer_token),
+) -> dict[str, bool]:
+    shop = await _owned_shop(user, token)
+    rows = await _table(
+        "DELETE",
+        "suppliers",
+        token,
+        params={"id": f"eq.{supplier_id}", "shop_id": f"eq.{shop['id']}", "select": "id"},
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Supplier not found.")
+    return {"deleted": True}
+
+
+@app.post("/sales")
+async def create_sale(
+    data: SaleCreate,
+    user: dict[str, Any] = Depends(current_user),
+    token: str = Depends(_bearer_token),
+) -> dict[str, Any]:
+    shop = await _owned_shop(user, token)
+    sale = await supabase_request(
+        "POST",
+        "/rest/v1/rpc/create_shop_sale",
+        token=token,
+        body={
+            "p_shop_id": shop["id"],
+            "p_discount_percent": str(data.discount_percent),
+            "p_payment_method": data.payment_method,
+            "p_items": [item.model_dump(exclude_none=True) for item in data.items],
+            "p_layby_deposit": str(data.layby_deposit),
+            "p_customer_name": data.customer_name.strip(),
+            "p_customer_phone": data.customer_phone.strip(),
+        },
+    )
+    if not isinstance(sale, dict):
+        raise HTTPException(status_code=502, detail="Supabase did not save the sale.")
+    return sale
+
+
+@app.get("/laybys")
+async def list_laybys(
+    user: dict[str, Any] = Depends(current_user),
+    token: str = Depends(_bearer_token),
+) -> list[dict[str, Any]]:
+    shop = await _owned_shop(user, token)
+    rows = await _table(
+        "GET",
+        "sales",
+        token,
+        params={
+            "shop_id": f"eq.{shop['id']}",
+            "layby_balance": "gt.0",
+            "layby_settled": "is.false",
+            "order": "sold_at.desc",
+            "select": "*",
+        },
+    )
+    return rows
+
+
+@app.get("/laybys/history")
+async def layby_history(
+    user: dict[str, Any] = Depends(current_user),
+    token: str = Depends(_bearer_token),
+) -> list[dict[str, Any]]:
+    """Every layby sale (open and settled) with its payment history attached."""
+    shop = await _owned_shop(user, token)
+    sales = await _table(
+        "GET",
+        "sales",
+        token,
+        params={
+            "shop_id": f"eq.{shop['id']}",
+            "payment_method": "eq.Layby",
+            "order": "sold_at.desc",
+            "select": "*",
+        },
+    )
+    if not sales:
+        return []
+    sale_ids = [str(sale["id"]) for sale in sales]
+    try:
+        payments = await _table(
+            "GET",
+            "layby_payments",
+            token,
+            params={
+                "select": "id,sale_id,amount,paid_at",
+                "sale_id": f"in.({','.join(sale_ids)})",
+                "order": "paid_at.asc",
+            },
+        )
+    except HTTPException as error:
+        # A missing layby_payments table (schema.sql never applied) must not
+        # break the whole History tab — show the sales with no payment rows.
+        if error.status_code == 404:
+            payments = []
+        else:
+            raise
+    payments_by_sale: dict[str, list[dict[str, Any]]] = {}
+    for payment in payments:
+        payments_by_sale.setdefault(str(payment["sale_id"]), []).append(payment)
+    return [
+        {**sale, "payments": payments_by_sale.get(str(sale["id"]), [])}
+        for sale in sales
+    ]
+
+
+@app.post("/laybys/{sale_id}/payments")
+async def pay_layby_endpoint(
+    sale_id: str,
+    data: LaybyPayment,
+    user: dict[str, Any] = Depends(current_user),
+    token: str = Depends(_bearer_token),
+) -> dict[str, Any]:
+    await _owned_shop(user, token)
+    try:
+        updated = await supabase_request(
+            "POST",
+            "/rest/v1/rpc/pay_layby",
+            token=token,
+            body={
+                "p_sale_id": sale_id,
+                "p_amount": str(data.amount),
+            },
+        )
+    except HTTPException as error:
+        # PostgREST surfaces plpgsql exceptions and missing table privileges
+        # as 400s. Translate the common ones into actionable messages —
+        # notably a missing UPDATE grant on sales, which used to surface as
+        # an opaque "Sale not found"-style failure.
+        detail = str(error.detail or "")
+        lowered = detail.lower()
+        if error.status_code == 400 and "permission denied" in lowered:
+            if "update" in lowered or "sales" in lowered:
+                raise HTTPException(
+                    status_code=500,
+                    detail=(
+                        "The database is missing the UPDATE grant on the "
+                        "sales table. Run the latest "
+                        "backend/supabase/schema.sql in the Supabase SQL "
+                        "editor and retry."
+                    ),
+                ) from error
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "The database rejected the payment for lack of table "
+                    "privileges. Re-run backend/supabase/schema.sql in the "
+                    "Supabase SQL editor."
+                ),
+            ) from error
+        if error.status_code == 400 and "sale not found" in lowered:
+            raise HTTPException(
+                status_code=404,
+                detail="That layby sale no longer exists or belongs to another shop.",
+            ) from error
+        if error.status_code == 400 and "not an open layby" in lowered:
+            raise HTTPException(
+                status_code=409,
+                detail="This sale is already fully paid.",
+            ) from error
+        raise
+    if not isinstance(updated, dict):
+        raise HTTPException(status_code=502, detail="Supabase did not record the payment.")
+    return updated
+
+
+def _zambia_boundary(day: date) -> str:
+    local = datetime.combine(day, time.min, tzinfo=timezone(timedelta(hours=2)))
+    return local.astimezone(timezone.utc).isoformat()
+
+
+@app.get("/dashboard")
+async def dashboard(
+    user: dict[str, Any] = Depends(current_user),
+    token: str = Depends(_bearer_token),
+) -> dict[str, Any]:
+    shop = await _owned_shop(user, token)
+    today = datetime.now(timezone(timedelta(hours=2))).date()
+    filters = {"shop_id": f"eq.{shop['id']}"}
+    product_rows = await _table(
+        "GET",
+        "products",
+        token,
+        params={"select": "id,quantity", **filters},
+    )
+    sale_rows = await _table(
+        "GET",
+        "sales",
+        token,
+        params={
+            "select": "total",
+            **filters,
+            "and": (
+                f"(sold_at.gte.{_zambia_boundary(today)},"
+                f"sold_at.lt.{_zambia_boundary(today + timedelta(days=1))})"
+            ),
+        },
+    )
+    return {
+        "product_count": len(product_rows),
+        "stock_count": sum(int(product["quantity"]) for product in product_rows),
+        "low_stock_count": sum(int(product["quantity"]) <= 5 for product in product_rows),
+        "today_sales": sum(float(sale["total"]) for sale in sale_rows),
+    }
+
+
+@app.get("/reports")
+async def reports(
+    start_date: date = Query(),
+    end_date: date = Query(),
+    user: dict[str, Any] = Depends(current_user),
+    token: str = Depends(_bearer_token),
+) -> dict[str, Any]:
+    if end_date < start_date:
+        raise HTTPException(status_code=422, detail="End date must not precede start date.")
+    shop = await _owned_shop(user, token)
+    shop_filter = {"shop_id": f"eq.{shop['id']}"}
+    after_end = end_date + timedelta(days=1)
+    sales = await _table(
+        "GET",
+        "sales",
+        token,
+        params={
+            "select": "*",
+            **shop_filter,
+            "and": (
+                f"(sold_at.gte.{_zambia_boundary(start_date)},"
+                f"sold_at.lt.{_zambia_boundary(after_end)})"
+            ),
+            "order": "sold_at.asc",
+        },
+    )
+    sale_ids = [str(sale["id"]) for sale in sales]
+    lines: list[dict[str, Any]] = []
+    if sale_ids:
+        lines = await _table(
+            "GET",
+            "sale_items",
+            token,
+            params={
+                "select": "sale_id,product_id,product_name,quantity,unit_price,unit_cost",
+                "sale_id": f"in.({','.join(sale_ids)})",
+            },
+        )
+    products = await _table(
+        "GET",
+        "products",
+        token,
+        params={
+            "select": "id,name,category,quantity",
+            **shop_filter,
+        },
+    )
+    products_by_id = {str(product["id"]): product for product in products}
+    daily_totals: dict[str, float] = {}
+    payment_totals: dict[str, float] = {}
+    product_totals: dict[str, dict[str, Any]] = {}
+    total_sales = 0.0
+    total_cost = 0.0
+
+    for sale in sales:
+        amount = float(sale["total"])
+        local_day = datetime.fromisoformat(
+            str(sale["sold_at"]).replace("Z", "+00:00")
+        ).astimezone(timezone(timedelta(hours=2))).date().isoformat()
+        daily_totals[local_day] = daily_totals.get(local_day, 0) + amount
+        method = str(sale["payment_method"])
+        payment_totals[method] = payment_totals.get(method, 0) + amount
+        total_sales += amount
+
+    for line in lines:
+        # product_id becomes NULL once the referenced product is deleted;
+        # report those lines under their recorded product_name instead.
+        raw_product_id = line.get("product_id")
+        if raw_product_id is None:
+            product_id = f"deleted:{line['product_name']}"
+        else:
+            product_id = str(raw_product_id)
+        product = products_by_id.get(product_id)
+        quantity = int(line["quantity"])
+        price = float(line["unit_price"])
+        cost = float(line["unit_cost"])
+        summary = product_totals.setdefault(
+            product_id,
+            {
+                "product_id": product_id,
+                "name": (product or {}).get("name") or line["product_name"],
+                "category": (product or {}).get("category") or "",
+                "stock": (product or {}).get("quantity") or 0,
+                "quantity": 0,
+                "revenue": 0.0,
+            },
+        )
+        summary["quantity"] += quantity
+        summary["revenue"] += price * quantity
+        total_cost += cost * quantity
+
+    return {
+        "sales": sales,
+        "items": lines,
+        "total_sales": total_sales,
+        "total_cost": total_cost,
+        "net_profit": total_sales - total_cost,
+        "sale_count": len(sales),
+        "payment_totals": payment_totals,
+        "daily_totals": [
+            {"date": day, "total": total}
+            for day, total in sorted(daily_totals.items())
+        ],
+        "top_products": sorted(
+            product_totals.values(),
+            key=lambda product: product["revenue"],
+            reverse=True,
+        ),
+    }
+
+
+@app.get("/settings")
+async def settings(
+    user: dict[str, Any] = Depends(current_user),
+    token: str = Depends(_bearer_token),
+) -> dict[str, Any]:
+    return await _owned_shop(user, token)
+
+
+@app.patch("/settings")
+async def update_settings(
+    data: ShopUpdate,
+    user: dict[str, Any] = Depends(current_user),
+    token: str = Depends(_bearer_token),
+) -> dict[str, Any]:
+    updates = data.model_dump(exclude_unset=True)
+    if not updates:
+        raise HTTPException(status_code=422, detail="Provide at least one shop setting.")
+    shop = await _owned_shop(user, token)
+    rows = await _table(
+        "PATCH",
+        "shops",
+        token,
+        params={"id": f"eq.{shop['id']}", "select": "*"},
+        body=updates,
+    )
+    if not rows:
+        raise HTTPException(status_code=502, detail="Supabase did not update shop settings.")
+    _shop_cache[user["id"]] = rows[0]  # keep cache in sync with the update
+    return rows[0]
