@@ -60,7 +60,7 @@ class _SaleSuccessPageState extends State<SaleSuccessPage> {
         '${customerName.isEmpty ? '' : 'Customer: $customerName\n'}\n'
         '$itemLines\n\n'
         'Subtotal: K$subtotal\nDiscount: K$discount\nTotal: K$total\n'
-        'Payment: $paymentMethod (${saleType} sale)\n\n'
+        'Payment: $paymentMethod ($saleType sale)\n\n'
         '${Urban7.returnPolicy}\n\n${Urban7.contactBlock}';
   }
 
@@ -125,7 +125,7 @@ class _SaleSuccessPageState extends State<SaleSuccessPage> {
               'Total: K$total',
               style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
             ),
-            pw.Text('Payment: $paymentMethod (${saleType} sale)'),
+            pw.Text('Payment: $paymentMethod ($saleType sale)'),
             pw.SizedBox(height: 10),
             pw.Text(Urban7.returnPolicy),
             pw.SizedBox(height: 6),
@@ -287,14 +287,16 @@ class _SaleSuccessPageState extends State<SaleSuccessPage> {
     } on ApiException catch (error) {
       if (mounted) showShopMessage(context, error.message);
     } on PlatformException catch (error) {
-      if (mounted)
+      if (mounted) {
         showShopMessage(
           context,
           error.message ?? 'Could not open print dialog.',
         );
+      }
     } on MissingPluginException {
-      if (mounted)
+      if (mounted) {
         showShopMessage(context, 'Printing is not available on this device.');
+      }
     }
   }
 
@@ -331,8 +333,9 @@ class _SaleSuccessPageState extends State<SaleSuccessPage> {
     } on ApiException catch (error) {
       if (mounted) showShopMessage(context, error.message);
     } on PlatformException catch (error) {
-      if (mounted)
+      if (mounted) {
         showShopMessage(context, error.message ?? 'Could not open SMS app.');
+      }
     }
   }
 
@@ -894,7 +897,7 @@ class _DigitalReceipt extends StatelessWidget {
               child: Image.asset(
                 Urban7.logoAsset,
                 fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                errorBuilder: (_, _, _) => const SizedBox.shrink(),
               ),
             ),
             Text(

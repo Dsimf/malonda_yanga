@@ -6,9 +6,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 import 'package:malonda_yanga/main.dart';
-import 'package:malonda_yanga/pages/add_product_page.dart';
 import 'package:malonda_yanga/pages/login_page.dart' show LoginPage, loginPrefsDisabledForTests;
-import 'package:malonda_yanga/pages/employees_page.dart';
+import 'package:malonda_yanga/pages/add_product_page.dart';
 import 'package:malonda_yanga/pages/layby_page.dart';
 import 'package:malonda_yanga/pages/reports_page.dart';
 import 'package:malonda_yanga/pages/sale_success_page.dart';

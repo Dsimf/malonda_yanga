@@ -215,8 +215,9 @@ class _ReportsPageState extends State<ReportsPage> {
         ),
       );
     } on PlatformException catch (error) {
-      if (mounted)
+      if (mounted) {
         showShopMessage(context, error.message ?? 'Could not export report.');
+      }
     } on MissingPluginException {
       if (mounted) showShopMessage(context, 'Report sharing is not available.');
     }

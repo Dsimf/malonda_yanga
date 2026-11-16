@@ -133,7 +133,7 @@ class _LandingHeader extends StatelessWidget {
           child: Image.asset(
             Urban7.logoAsset,
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => const Icon(
+            errorBuilder: (_, _, _) => const Icon(
               Icons.checkroom_rounded,
               color: Colors.white,
               size: 20,

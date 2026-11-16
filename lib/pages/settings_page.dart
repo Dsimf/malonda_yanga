@@ -226,7 +226,7 @@ class _SettingsHeader extends StatelessWidget {
         const Expanded(
           child: Text(
             '${Urban7.appName}\n${Urban7.companyName}',
-            style: const TextStyle(
+            style: TextStyle(
               color: Colors.white,
               fontSize: 19,
               height: 1.15,
