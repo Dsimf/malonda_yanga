@@ -449,9 +449,9 @@ class _SalesPageState extends State<SalesPage> {
         context,
         '/sale/success',
         arguments: {
-          'subtotal': (result['subtotal'] as num).round(),
-          'discount': (result['discount'] as num).round(),
-          'total': (result['total'] as num).round(),
+          'subtotal': (result['subtotal'] as num?)?.round() ?? 0,
+          'discount': (result['discount'] as num?)?.round() ?? 0,
+          'total': (result['total'] as num?)?.round() ?? 0,
           'paymentMethod': _paymentMethod,
           'saleType': _saleType,
           'customerName': customerName,
@@ -496,8 +496,8 @@ class _SaleProduct {
       name: name,
       category: category,
       sku: json['sku'] as String? ?? '',
-      price: (json['price'] as num).toDouble(),
-      stock: (json['quantity'] as num).toInt(),
+      price: (json['price'] as num?)?.toDouble() ?? 0,
+      stock: (json['quantity'] as num?)?.toInt() ?? 0,
       imageUrl: json['image_url'] as String? ?? '',
       icon: category.contains('footwear')
           ? Icons.directions_run_rounded
