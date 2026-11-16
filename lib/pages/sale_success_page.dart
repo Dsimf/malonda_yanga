@@ -59,7 +59,7 @@ class _SaleSuccessPageState extends State<SaleSuccessPage> {
     return '$shopName\n${Urban7.companyName}\nSales receipt\n'
         '${customerName.isEmpty ? '' : 'Customer: $customerName\n'}\n'
         '$itemLines\n\n'
-        'Subtotal: K$subtotal\nDiscount: K$discount\nTotal: K$total\n'
+        'Subtotal: K${subtotal.toStringAsFixed(2)}\nDiscount: K${discount.toStringAsFixed(2)}\nTotal: K${total.toStringAsFixed(2)}\n'
         'Payment: $paymentMethod ($saleType sale)\n\n'
         '${Urban7.returnPolicy}\n\n${Urban7.contactBlock}';
   }
@@ -119,10 +119,10 @@ class _SaleSuccessPageState extends State<SaleSuccessPage> {
                 ),
               ),
             pw.Divider(),
-            pw.Text('Subtotal: K$subtotal'),
-            pw.Text('Discount: K$discount'),
+            pw.Text('Subtotal: K${subtotal.toStringAsFixed(2)}'),
+            pw.Text('Discount: K${discount.toStringAsFixed(2)}'),
             pw.Text(
-              'Total: K$total',
+              'Total: K${total.toStringAsFixed(2)}',
               style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
             ),
             pw.Text('Payment: $paymentMethod ($saleType sale)'),
@@ -985,14 +985,19 @@ class _DigitalReceipt extends StatelessWidget {
                 children: [
                   _ReceiptTotal(
                     label: 'Subtotal ($itemCount items)',
-                    value: 'K$subtotal.00',
+                    value: 'K${subtotal.toStringAsFixed(2)}',
+                    strong: true,
                   ),
                   const SizedBox(height: 5),
-                  _ReceiptTotal(label: 'Discount', value: '-K$discount.00'),
+                  _ReceiptTotal(
+                    label: 'Discount',
+                    value: '-K${discount.toStringAsFixed(2)}',
+                    strong: true,
+                  ),
                   const SizedBox(height: 6),
                   _ReceiptTotal(
                     label: 'Final Paid',
-                    value: 'K$total.00',
+                    value: 'K${total.toStringAsFixed(2)}',
                     strong: true,
                   ),
                 ],
