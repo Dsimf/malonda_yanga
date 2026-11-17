@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../services/api_client.dart';
 import '../widgets/shop_ui.dart';
+import 'inventory_page.dart' show routeObserver;
 
 class ReportsPage extends StatefulWidget {
   const ReportsPage({super.key});
@@ -14,7 +15,7 @@ class ReportsPage extends StatefulWidget {
   State<ReportsPage> createState() => _ReportsPageState();
 }
 
-class _ReportsPageState extends State<ReportsPage> {
+class _ReportsPageState extends State<ReportsPage> with RouteAware {
   String _period = 'Daily';
   String _selectedCategory = 'All Categories';
   DateTimeRange _dateRange = DateTimeRange(
@@ -38,6 +39,11 @@ class _ReportsPageState extends State<ReportsPage> {
     return products.cast<Map<String, dynamic>>();
   }
 
+  Map<String, dynamic> get _expenseBreakdown {
+    final breakdown = _report?['expense_breakdown'];
+    return breakdown is Map<String, dynamic> ? breakdown : const {};
+  }
+
   Map<String, dynamic> get _paymentTotals {
     final totals = _report?['payment_totals'];
     return totals is Map<String, dynamic> ? totals : const {};
@@ -58,6 +64,23 @@ class _ReportsPageState extends State<ReportsPage> {
     super.initState();
     _loadReport();
   }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    routeObserver.subscribe(this, ModalRoute.of(context)!);
+  }
+
+  @override
+  void dispose() {
+    routeObserver.unsubscribe(this);
+    super.dispose();
+  }
+
+  /// Called when this page is revealed again after a route is popped off it
+  /// (e.g. user returns from the sale-success page).
+  @override
+  void didPopNext() => _loadReport();
 
   Future<void> _loadReport() async {
     setState(() {
@@ -180,7 +203,11 @@ class _ReportsPageState extends State<ReportsPage> {
       [],
       ['Metric', 'Value'],
       ['Total sales', report['total_sales']],
-      ['Total cost', report['total_cost']],
+      ['Total cost (cost of goods sold)', report['total_cost']],
+      ['Gross profit', report['gross_profit']],
+      for (final entry in _expenseBreakdown.entries)
+        ['Expense - ${entry.key}', entry.value],
+      ['Total operating expenses', report['total_expenses']],
       ['Net profit', report['net_profit']],
       ['Number of sales', report['sale_count']],
       [],
@@ -257,6 +284,8 @@ class _ReportsPageState extends State<ReportsPage> {
                   ),
                 if (_loading) const LinearProgressIndicator(),
                 _SummaryCard(period: _period, report: _report ?? const {}),
+                const SizedBox(height: 11),
+                _ProfitLossCard(report: _report ?? const {}),
                 const SizedBox(height: 11),
                 _SalesChartCard(days: _dailySales),
                 const SizedBox(height: 11),
@@ -603,18 +632,21 @@ class _SummaryCard extends StatelessWidget {
   final String period;
   final Map<String, dynamic> report;
 
+  String get _title => switch (period) {
+    'Daily' => 'Today’s Summary',
+    'Weekly' => 'This Week’s Summary',
+    'Monthly' => 'This Month’s Summary',
+    'Yearly' => 'Annual Summary',
+    _ => 'Custom Range Summary',
+  };
+
   @override
   Widget build(BuildContext context) {
-    final title = switch (period) {
-      'Daily' => 'Today’s Summary',
-      'Weekly' => 'This Week’s Summary',
-      'Monthly' => 'This Month’s Summary',
-      'Yearly' => 'Annual Summary',
-      _ => 'Custom Range Summary',
-    };
     final sales = (report['total_sales'] as num?)?.toDouble() ?? 0;
     final cost = (report['total_cost'] as num?)?.toDouble() ?? 0;
-    final profit = (report['net_profit'] as num?)?.toDouble() ?? 0;
+    final grossProfit = (report['gross_profit'] as num?)?.toDouble() ?? (sales - cost);
+    final expenses = (report['total_expenses'] as num?)?.toDouble() ?? 0;
+    final netProfit = (report['net_profit'] as num?)?.toDouble() ?? (grossProfit - expenses);
     final invoices = (report['sale_count'] as num?)?.toInt() ?? 0;
     return _ReportCard(
       child: Column(
@@ -623,7 +655,7 @@ class _SummaryCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  title,
+                  _title,
                   style: const TextStyle(
                     color: ShopColors.text,
                     fontSize: 15,
@@ -659,12 +691,10 @@ class _SummaryCard extends StatelessWidget {
             icon: Icons.shopping_cart_outlined,
             iconColor: ShopColors.primary,
             iconBackground: ShopColors.paleBlue,
-            label: 'Total Sales',
+            label: 'Total Sales (Revenue)',
             detail: '$invoices Invoices',
             value: 'K${sales.toStringAsFixed(0)}',
-            note: period == 'Daily'
-                ? '+18% vs yesterday'
-                : 'For selected period',
+            note: 'For selected period',
             valueColor: ShopColors.primary,
             noteColor: ShopColors.green,
           ),
@@ -673,8 +703,8 @@ class _SummaryCard extends StatelessWidget {
             icon: Icons.inventory_2_outlined,
             iconColor: const Color(0xFFB63F00),
             iconBackground: const Color(0xFFFFDBCC),
-            label: 'Total Cost',
-            detail: 'Cost of goods sold',
+            label: 'Cost of Goods Sold',
+            detail: 'Product purchase cost',
             value: 'K${cost.toStringAsFixed(0)}',
             note: 'For selected period',
             valueColor: ShopColors.text,
@@ -685,12 +715,363 @@ class _SummaryCard extends StatelessWidget {
             icon: Icons.trending_up_rounded,
             iconColor: ShopColors.green,
             iconBackground: const Color(0xFF6FFBBE),
-            label: 'Net Profit',
-            detail: 'Sales less product costs',
-            value: 'K${profit.toStringAsFixed(0)}',
-            note: period == 'Daily' ? 'Safe Target' : 'For selected period',
+            label: 'Gross Profit',
+            detail: 'Revenue minus cost of goods',
+            value: 'K${grossProfit.toStringAsFixed(0)}',
+            note: 'For selected period',
             valueColor: ShopColors.green,
             noteColor: ShopColors.green,
+          ),
+          const SizedBox(height: 8),
+          _SummaryMetric(
+            icon: Icons.account_balance_outlined,
+            iconColor: const Color(0xFF7C4DFF),
+            iconBackground: const Color(0xFFEDE7FF),
+            label: 'Net Profit',
+            detail: 'Gross profit minus expenses',
+            value: 'K${netProfit.toStringAsFixed(0)}',
+            note: 'After operating expenses',
+            valueColor: const Color(0xFF7C4DFF),
+            noteColor: const Color(0xFF7C4DFF),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfitLossCard extends StatelessWidget {
+  const _ProfitLossCard({required this.report});
+
+  final Map<String, dynamic> report;
+
+  @override
+  Widget build(BuildContext context) {
+    final sales = (report['total_sales'] as num?)?.toDouble() ?? 0;
+    final cost = (report['total_cost'] as num?)?.toDouble() ?? 0;
+    final expenses = (report['total_expenses'] as num?)?.toDouble() ?? 0;
+    final grossProfit = sales - cost;
+    final netProfit = (report['net_profit'] as num?)?.toDouble() ?? grossProfit - expenses;
+    final grossMargin = sales > 0 ? grossProfit / sales * 100 : 0.0;
+    final netMargin = sales > 0 ? netProfit / sales * 100 : 0.0;
+    final invoiceCount = (report['sale_count'] as num?)?.toInt() ?? 0;
+
+    return _ReportCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Financial Summary',
+                  style: TextStyle(
+                    color: ShopColors.text,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              Text(
+                'Profit & Loss (Income Statement)',
+                style: const TextStyle(color: ShopColors.muted, fontSize: 10),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Step 1: Gross Profit
+          Container(
+            padding: const EdgeInsets.all(11),
+            decoration: BoxDecoration(
+              color: ShopColors.pale,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE0E3E9)),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.calculate_rounded,
+                        color: ShopColors.primary, size: 14),
+                    const SizedBox(width: 4),
+                    const Text(
+                      'STEP 1: GROSS PROFIT',
+                      style: TextStyle(
+                        color: ShopColors.primary,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.6,
+                      ),
+                    ),
+                    const Spacer(),
+                    const Text(
+                      'Revenue − COGS',
+                      style: TextStyle(color: ShopColors.muted, fontSize: 9),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 9),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.all(7),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          children: [
+                            const Text('Sales Revenue',
+                                style: TextStyle(
+                                    color: ShopColors.muted, fontSize: 9)),
+                            const SizedBox(height: 2),
+                            Text(
+                              'K${sales.toStringAsFixed(0)}',
+                              style: const TextStyle(
+                                color: ShopColors.primary,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            Text('$invoiceCount Invoices',
+                                style: const TextStyle(
+                                    color: ShopColors.green,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700)),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 6),
+                      child: Text('−', style: TextStyle(
+                          color: ShopColors.muted,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800)),
+                    ),
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.all(7),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          children: [
+                            const Text('COGS (Cost)',
+                                style: TextStyle(
+                                    color: ShopColors.muted, fontSize: 9)),
+                            const SizedBox(height: 2),
+                            Text(
+                              'K${cost.toStringAsFixed(0)}',
+                              style: const TextStyle(
+                                color: ShopColors.red,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const Text('Direct Items',
+                                style: TextStyle(
+                                    color: ShopColors.muted, fontSize: 9)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 9),
+                Row(
+                  children: [
+                    const Text('  =  Gross Profit',
+                        style: TextStyle(
+                            color: ShopColors.text,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800)),
+                    const Spacer(),
+                    Text(
+                      'K${grossProfit.toStringAsFixed(0)}',
+                      style: const TextStyle(
+                          color: ShopColors.primary,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: ShopColors.paleBlue,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '${grossMargin.toStringAsFixed(1)}%',
+                        style: const TextStyle(
+                            color: ShopColors.primary,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 9),
+          // Step 2: Operating Expenses
+          Container(
+            padding: const EdgeInsets.all(11),
+            decoration: BoxDecoration(
+              color: ShopColors.pale,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE0E3E9)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFDBCC),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.receipt_long_rounded,
+                      color: ShopColors.orange, size: 18),
+                ),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'OPERATING EXPENSES (OPEX)',
+                        style: TextStyle(
+                          color: ShopColors.muted,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        '-K${expenses.toStringAsFixed(0)}',
+                        key: Key('reportValExpenses'),
+                        style: TextStyle(
+                          color: ShopColors.red,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () =>
+                      Navigator.pushNamed(context, '/expenses'),
+                  icon: const Text('Manage Expenses',
+                      style: TextStyle(
+                          color: ShopColors.primary,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700)),
+                  label: const Icon(Icons.arrow_forward_rounded,
+                      color: ShopColors.primary, size: 14),
+                  style: TextButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: ShopColors.primary,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 9, vertical: 5),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      side: const BorderSide(color: Color(0xFFE0E3E9)),
+                    ),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 9),
+          // Final Net Profit tile
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF6FFBBE).withValues(alpha: .4),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF6FFBBE)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: ShopColors.green,
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  child: const Icon(Icons.trending_up_rounded,
+                      color: Colors.white, size: 24),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Text('Net Profit',
+                              style: TextStyle(
+                                  color: ShopColors.text,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800)),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF6FFBBE),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Text('Safe Target',
+                                style: TextStyle(
+                                    color: ShopColors.green,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w800)),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        'Gross Profit (K${grossProfit.toStringAsFixed(0)}) − OPEX (K${expenses.toStringAsFixed(0)})',
+                        style: const TextStyle(
+                            color: ShopColors.muted, fontSize: 10),
+                      ),
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      'K${netProfit.toStringAsFixed(0)}',
+                      key: const Key('reportValNetProfit'),
+                      style: TextStyle(
+                        color: netProfit >= 0
+                            ? ShopColors.green
+                            : ShopColors.red,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    Text(
+                      'Margin: ${netMargin.toStringAsFixed(1)}%',
+                      style: const TextStyle(
+                          color: ShopColors.green,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ],
       ),

@@ -1301,7 +1301,7 @@ class _FieldHeading extends StatelessWidget {
 }
 
 /// Letter sizes offered on the add-product size dropdown.
-const _kLetterSizes = ['S', 'M', 'L', 'XL', 'XXL'];
+const _kLetterSizes = ['S', 'M', 'L', 'XL', 'XXL', '3XL', '4XL', '5XL'];
 
 /// Numeric sizes offered on the add-product size dropdown.
 const _kNumericSizes = ['28', '30', '32', '34', '36', '38', '40'];

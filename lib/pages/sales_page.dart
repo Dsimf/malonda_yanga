@@ -458,9 +458,9 @@ class _SalesPageState extends State<SalesPage> {
         context,
         '/sale/success',
         arguments: {
-          'subtotal': (result['subtotal'] as num?)?.round() ?? 0,
-          'discount': (result['discount'] as num?)?.round() ?? 0,
-          'total': (result['total'] as num?)?.round() ?? 0,
+          'subtotal': _parseMoneyInt(result['subtotal']),
+          'discount': _parseMoneyInt(result['discount']),
+          'total': _parseMoneyInt(result['total']),
           'paymentMethod': _paymentMethod,
           'saleType': _saleType,
           'customerName': customerName,
@@ -483,6 +483,14 @@ class _SalesPageState extends State<SalesPage> {
       if (mounted) setState(() => _completing = false);
     }
   }
+}
+
+/// Safely converts a Postgres numeric value (may be a String like "40.00"
+/// or already a num) to an integer.  Returns 0 for null / unparseable values.
+int _parseMoneyInt(dynamic value) {
+  if (value == null) return 0;
+  if (value is num) return value.round();
+  return num.tryParse(value.toString())?.round() ?? 0;
 }
 
 class _SaleProduct {
