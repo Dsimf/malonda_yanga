@@ -43,6 +43,12 @@ class _SalesPageState extends State<SalesPage> {
       ? _discountValue.round().clamp(0, _subtotal)
       : (_subtotal * _discountPercent / 100).round();
   int get _total => _subtotal - _discountAmount;
+  int get _cogs => _cart.entries.fold<int>(0, (total, item) {
+    final product = _productForId(item.key);
+    return total + ((product.cost * item.value.quantity).round());
+  });
+  int get _grossProfit => _subtotal - _cogs;
+  int get _netProfit => _total - _cogs;
   int get _laybyBalance =>
       _paymentMethod == 'Layby' ? (_total - _laybyDeposit.round()).clamp(0, _total) : 0;
 
@@ -309,6 +315,9 @@ class _SalesPageState extends State<SalesPage> {
                 discountValue: _discountValue,
                 discountAmount: _discountAmount,
                 total: _total,
+                cogs: _cogs,
+                grossProfit: _grossProfit,
+                netProfit: _netProfit,
                 paymentMethod: _paymentMethod,
                 saleType: _saleType,
                 customerName: _receiptCustomerName,
@@ -483,6 +492,7 @@ class _SaleProduct {
     required this.category,
     required this.sku,
     required this.price,
+    required this.cost,
     required this.stock,
     required this.imageUrl,
     required this.icon,
@@ -497,6 +507,7 @@ class _SaleProduct {
       category: category,
       sku: json['sku'] as String? ?? '',
       price: (json['price'] as num?)?.toDouble() ?? 0,
+      cost: (json['cost'] as num?)?.toDouble() ?? 0,
       stock: (json['quantity'] as num?)?.toInt() ?? 0,
       imageUrl: json['image_url'] as String? ?? '',
       icon: category.contains('footwear')
@@ -514,6 +525,7 @@ class _SaleProduct {
   final String category;
   final String sku;
   final double price;
+  final double cost;
   final int stock;
   final String imageUrl;
   final IconData icon;
@@ -1026,6 +1038,9 @@ class _OrderSummary extends StatelessWidget {
     required this.paymentMethod,
     required this.saleType,
     required this.customerName,
+    required this.cogs,
+    required this.grossProfit,
+    required this.netProfit,
     required this.onPaymentChanged,
     required this.onComplete,
     this.laybyBalance = 0,
@@ -1047,6 +1062,9 @@ class _OrderSummary extends StatelessWidget {
   final String paymentMethod;
   final String saleType;
   final String customerName;
+  final int cogs;
+  final int grossProfit;
+  final int netProfit;
   final ValueChanged<String> onPaymentChanged;
   final VoidCallback? onComplete;
   final int laybyBalance;
@@ -1057,259 +1075,446 @@ class _OrderSummary extends StatelessWidget {
     padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
     decoration: BoxDecoration(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(19),
+      borderRadius: BorderRadius.circular(14),
       boxShadow: const [
         BoxShadow(
           color: Color(0x0D192033),
-          blurRadius: 20,
-          offset: Offset(0, 7),
+          blurRadius: 24,
+          offset: Offset(-4, 8),
         ),
       ],
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'ORDER SUMMARY',
-                    style: TextStyle(
-                      color: Color(0xFF777A89),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: .4,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    'Total Items: $itemCount',
-                    style: const TextStyle(
-                      color: ShopColors.text,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                const Text(
-                  'TOTAL DUE',
-                  style: TextStyle(
-                    color: Color(0xFF777A89),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: .3,
-                  ),
-                ),
-                Text(
-                  'K$total',
-                  style: const TextStyle(
-                    color: ShopColors.primary,
-                    fontSize: 28,
-                    height: 1.05,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-        const SizedBox(height: 13),
-        Row(
-          children: [
-            const Expanded(
-              child: Text(
-                'Sale Type',
-                style: TextStyle(
-                  color: ShopColors.text,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            Expanded(
-              child: DropdownButtonFormField<String>(
-                key: const Key('saleTypeDropdown'),
-                initialValue: saleType,
-                isExpanded: true,
-                items: Urban7.saleTypes
-                    .map(
-                      (type) => DropdownMenuItem(value: type, child: Text(type)),
-                    )
-                    .toList(),
-                onChanged: (value) {
-                  if (value != null) onSaleTypeChanged(value);
-                },
-                decoration: InputDecoration(
-                  isDense: true,
-                  filled: true,
-                  fillColor: ShopColors.pale,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 8,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(9),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        TextField(
-          key: const Key('receiptCustomerNameField'),
-          onChanged: onCustomerNameChanged,
-          decoration: InputDecoration(
-            labelText: 'Customer name on receipt (optional)',
-            hintText: 'Appears on the receipt',
-            prefixIcon: const Icon(
-              Icons.receipt_long_rounded,
-              size: 19,
-              color: ShopColors.primary,
-            ),
-            isDense: true,
-            filled: true,
-            fillColor: ShopColors.pale,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(9),
-              borderSide: BorderSide.none,
-            ),
+        // Sale Channel / Type selector
+        const Text(
+          'SALE CHANNEL / TYPE',
+          style: TextStyle(
+            color: ShopColors.muted,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: .6,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Row(
           children: [
-            const Expanded(
-              child: Text(
-                'Discount',
-                style: TextStyle(
-                  color: ShopColors.text,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
+            Expanded(
+              child: _ChannelToggle(
+                icon: Icons.storefront_outlined,
+                label: 'Walk-in Store Sale',
+                selected: saleType == 'Walk-in',
+                onTap: () => onSaleTypeChanged('Walk-in'),
               ),
             ),
-            SizedBox(
-              width: 132,
-              height: 42,
-              child: DropdownButtonFormField<String>(
-                key: const Key('discountTypeDropdown'),
-                initialValue: discountType == 'value'
-                    ? 'Kwacha Value (K)'
-                    : 'Percentage (%)',
-                isExpanded: true,
-                items: const [
-                  DropdownMenuItem(value: 'Percentage (%)', child: Text('Percentage (%)')),
-                  DropdownMenuItem(value: 'Kwacha Value (K)', child: Text('Kwacha Value (K)')),
-                ],
-                onChanged: (value) {
-                  if (value == null) return;
-                  onDiscountTypeChanged(
-                    value == 'Kwacha Value (K)' ? 'value' : 'percent',
-                  );
-                },
-                decoration: InputDecoration(
-                  isDense: true,
-                  filled: true,
-                  fillColor: ShopColors.pale,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 8,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(9),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 6),
-            SizedBox(
-              width: 104,
-              height: 42,
-              child: TextField(
-                key: const Key('discountPercentField'),
-                controller: discountController,
-                onChanged: (value) => onDiscountChanged(discountType, value),
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                textAlign: TextAlign.end,
-                decoration: InputDecoration(
-                  suffixText: discountType == 'value' ? 'K' : '%',
-                  hintText: '0',
-                  filled: true,
-                  fillColor: ShopColors.pale,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 8,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(9),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: _ChannelToggle(
+                icon: Icons.public_rounded,
+                label: 'Online / Remote',
+                selected: saleType == 'Online',
+                onTap: () => onSaleTypeChanged('Online'),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        Row(
+        const SizedBox(height: 12),
+        // Customer Name Input
+        const Row(
           children: [
-            const Expanded(
+            Expanded(
               child: Text(
-                'Subtotal',
-                style: TextStyle(color: ShopColors.muted, fontSize: 12),
+                'Customer Name (for Receipt)',
+                style: TextStyle(
+                  color: ShopColors.muted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
             Text(
-              'K$subtotal',
-              style: const TextStyle(color: ShopColors.muted, fontSize: 12),
+              'Optional',
+              style: TextStyle(color: ShopColors.outline, fontSize: 12),
             ),
           ],
         ),
         const SizedBox(height: 4),
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                discountType == 'value'
-                    ? 'Discount (K${discountValue.toStringAsFixed(discountValue % 1 == 0 ? 0 : 2)})'
-                    : 'Discount (${discountPercent.toStringAsFixed(discountPercent % 1 == 0 ? 0 : 2)}%)',
-                style: const TextStyle(color: ShopColors.green, fontSize: 12),
-              ),
+        TextField(
+          key: const Key('receiptCustomerNameField'),
+          onChanged: onCustomerNameChanged,
+          decoration: InputDecoration(
+            hintText: 'e.g. Kondwani Mwape (Optional)',
+            hintStyle: const TextStyle(color: ShopColors.outline, fontSize: 14),
+            prefixIcon: const Icon(
+              Icons.person_outline_rounded,
+              size: 20,
+              color: ShopColors.outline,
             ),
-            Text(
-              '-K$discountAmount',
-              style: const TextStyle(
-                color: ShopColors.green,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-              ),
+            isDense: true,
+            filled: true,
+            fillColor: ShopColors.pale,
+            contentPadding: const EdgeInsets.symmetric(vertical: 10),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: ShopColors.outline.withValues(alpha: .4)),
             ),
-          ],
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: ShopColors.outline.withValues(alpha: .4)),
+            ),
+          ),
         ),
-        const Divider(height: 17),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
+        // Discount card
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: ShopColors.pale.withValues(alpha: .7),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: ShopColors.outline.withValues(alpha: .55)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Row(
+                      children: [
+                        Icon(Icons.sell_outlined, size: 16, color: ShopColors.orange),
+                        SizedBox(width: 4),
+                        Text(
+                          'Apply Discount',
+                          style: TextStyle(
+                            color: ShopColors.muted,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: ShopColors.pale,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _DiscountTypeToggle(
+                          label: 'Percentage (%)',
+                          selected: discountType == 'percent',
+                          onTap: () => onDiscountTypeChanged('percent'),
+                        ),
+                        _DiscountTypeToggle(
+                          label: 'Fixed (K)',
+                          selected: discountType == 'value',
+                          onTap: () => onDiscountTypeChanged('value'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      height: 40,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(9),
+                        border: Border.all(
+                          color: ShopColors.outline.withValues(alpha: .4),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Text(
+                            discountType == 'value' ? 'K' : '%',
+                            style: const TextStyle(
+                              color: ShopColors.primary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: TextField(
+                              key: const Key('discountPercentField'),
+                              controller: discountController,
+                              onChanged: (value) =>
+                                  onDiscountChanged(discountType, value),
+                              keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true,
+                              ),
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              decoration: const InputDecoration(
+                                hintText: '0',
+                                border: InputBorder.none,
+                                isDense: true,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            discountType == 'value' ? 'K off' : '% off',
+                            style: const TextStyle(
+                              color: ShopColors.outline,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  SizedBox(
+                    height: 40,
+                    child: OutlinedButton(
+                      onPressed: () {},
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: ShopColors.primary,
+                        backgroundColor: ShopColors.pale,
+                        textStyle: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        side: BorderSide.none,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(9),
+                        ),
+                      ),
+                      child: const Text('Apply'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Order Totals Breakdown
+        Container(
+          padding: const EdgeInsets.only(top: 4),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Subtotal ($itemCount items)',
+                      style: const TextStyle(color: ShopColors.outline, fontSize: 12),
+                    ),
+                  ),
+                  Text(
+                    'K$subtotal',
+                    style: const TextStyle(
+                      color: ShopColors.text,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  const Icon(Icons.discount_outlined, size: 15, color: ShopColors.green),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      discountType == 'value'
+                          ? 'Discount (K${discountValue.toStringAsFixed(discountValue % 1 == 0 ? 0 : 2)})'
+                          : 'Discount (${discountPercent.toStringAsFixed(discountPercent % 1 == 0 ? 0 : 2)}%)',
+                      style: const TextStyle(
+                        color: ShopColors.green,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '-K$discountAmount',
+                    style: const TextStyle(
+                      color: ShopColors.green,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              const Divider(height: 1, color: Color(0xFFC4C6D4)),
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'TOTAL DUE',
+                          style: TextStyle(
+                            color: ShopColors.outline,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: .6,
+                          ),
+                        ),
+                        Text(
+                          'Tax Inclusive',
+                          style: TextStyle(
+                            color: ShopColors.green,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    'K$total.00',
+                    style: const TextStyle(
+                      color: ShopColors.primary,
+                      fontSize: 24,
+                      height: 1,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        // Profit insight card
+        Container(
+          padding: const EdgeInsets.all(9),
+          decoration: BoxDecoration(
+            color: ShopColors.pale,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: ShopColors.outline.withValues(alpha: .4),
+            ),
+          ),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Cost of Goods (COGS):',
+                      style: TextStyle(
+                        color: ShopColors.outline,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    'K$cogs',
+                    style: const TextStyle(
+                      color: ShopColors.text,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 5),
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Gross Profit:',
+                      style: TextStyle(
+                        color: ShopColors.outline,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    'K$grossProfit',
+                    style: const TextStyle(
+                      color: ShopColors.green,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              const Divider(
+                height: 1,
+                color: Color(0xFFC4C6D4),
+              ),
+              const SizedBox(height: 7),
+              Row(
+                children: [
+                  const Expanded(
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.trending_up_rounded,
+                          size: 15,
+                          color: ShopColors.green,
+                        ),
+                        SizedBox(width: 4),
+                        Text(
+                          'Est. Net Profit',
+                          style: TextStyle(
+                            color: ShopColors.muted,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 9,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: ShopColors.greenPale,
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    child: Text(
+                      'Net Profit: K$netProfit',
+                      style: const TextStyle(
+                        color: ShopColors.green,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Payment Method
         const Text(
           'Payment Method',
           style: TextStyle(
             color: ShopColors.muted,
-            fontSize: 12,
+            fontSize: 11,
             fontWeight: FontWeight.w700,
           ),
         ),
-        const SizedBox(height: 7),
+        const SizedBox(height: 5),
         Row(
           children: [
             Expanded(
@@ -1320,16 +1525,16 @@ class _OrderSummary extends StatelessWidget {
                 onTap: () => onPaymentChanged('Cash'),
               ),
             ),
-            const SizedBox(width: 5),
+            const SizedBox(width: 4),
             Expanded(
               child: _PaymentOption(
                 label: 'Airtel / MTN',
-                icon: Icons.phone_iphone_rounded,
+                icon: Icons.smartphone_rounded,
                 selected: paymentMethod == 'Airtel / MTN',
                 onTap: () => onPaymentChanged('Airtel / MTN'),
               ),
             ),
-            const SizedBox(width: 5),
+            const SizedBox(width: 4),
             Expanded(
               child: _PaymentOption(
                 label: 'Card POS',
@@ -1340,7 +1545,7 @@ class _OrderSummary extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 7),
+        const SizedBox(height: 5),
         _PaymentOption(
           label: 'Layby (pay deposit now, balance later)',
           icon: Icons.schedule_rounded,
@@ -1441,6 +1646,98 @@ class _OrderSummary extends StatelessWidget {
 /// the dialog's pop animation was still rebuilding its TextFields — which
 /// threw "used after being disposed" every time Cancel or Confirm was tapped
 /// and froze the app on the modal barrier.
+class _ChannelToggle extends StatelessWidget {
+  const _ChannelToggle({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: selected ? ShopColors.primaryContainer : ShopColors.pale,
+    borderRadius: BorderRadius.circular(10),
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: SizedBox(
+        height: 42,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 17,
+              color: selected ? Colors.white : ShopColors.outline,
+            ),
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: selected ? Colors.white : ShopColors.text,
+                  fontSize: 12,
+                  fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _DiscountTypeToggle extends StatelessWidget {
+  const _DiscountTypeToggle({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(5),
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: selected ? Colors.white : Colors.transparent,
+        borderRadius: BorderRadius.circular(5),
+        boxShadow: selected
+            ? const [
+                BoxShadow(
+                  color: Color(0x14192033),
+                  blurRadius: 3,
+                  offset: Offset(0, 1),
+                ),
+              ]
+            : null,
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+          color: selected ? ShopColors.primary : ShopColors.outline,
+        ),
+      ),
+    ),
+  );
+}
+
 class _LaybyConfirmDialog extends StatefulWidget {
   const _LaybyConfirmDialog({required this.deposit, required this.balance});
 
