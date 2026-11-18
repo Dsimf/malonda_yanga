@@ -340,8 +340,7 @@ class _ExpensesPageState extends State<ExpensesPage> {
                           return Expanded(
                             child: GestureDetector(
                               key: Key('opexPeriod${_periodLabels[index]}'),
-                              onTap: () =>
-                                  setState(() => _periodIndex = index),
+                              onTap: () => setState(() => _periodIndex = index),
                               child: Container(
                                 margin: EdgeInsets.only(
                                   right: index == _periodLabels.length - 1
@@ -555,7 +554,10 @@ class _ExpensesPageState extends State<ExpensesPage> {
                 Center(
                   child: Text(
                     'All expenses sync to the Reports page automatically.',
-                    style: const TextStyle(color: ShopColors.muted, fontSize: 10),
+                    style: const TextStyle(
+                      color: ShopColors.muted,
+                      fontSize: 10,
+                    ),
                   ),
                 ),
               ],

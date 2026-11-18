@@ -156,6 +156,11 @@ class ApiClient {
         body: data,
       ).then((value) => value as Map<String, dynamic>);
 
+  /// Voids/removes a sale that was recorded by mistake.
+  static Future<void> deleteSale(String saleId) async {
+    await _send('DELETE', '/sales/$saleId');
+  }
+
   static Future<List<Map<String, dynamic>>> laybys() async =>
       ((await _send('GET', '/laybys')) as List).cast<Map<String, dynamic>>();
 

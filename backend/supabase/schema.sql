@@ -99,9 +99,14 @@ create table if not exists public.expenses (
   category text not null,
   amount numeric(12, 2) not null check (amount > 0),
   note text not null default '',
+  payment_method text not null default 'Cash Drawer',
   spent_on date not null default current_date,
   created_at timestamptz not null default now()
 );
+
+-- Existing installs: add the payment_method column to the expenses table.
+alter table public.expenses
+  add column if not exists payment_method text not null default 'Cash Drawer';
 
 create index if not exists expenses_shop_period_idx on public.expenses (shop_id, spent_on);
 
@@ -172,7 +177,7 @@ grant usage on schema public to authenticated;
 grant select, insert, update on public.shops to authenticated;
 grant select, insert, update, delete on public.products to authenticated;
 grant select, insert, update, delete on public.suppliers to authenticated;
-grant select, insert, update on public.sales, public.sale_items to authenticated;
+grant select, insert, update, delete on public.sales, public.sale_items to authenticated;
 grant select, insert, update, delete on public.expenses to authenticated;
 grant select, insert on public.layby_payments to authenticated;
 
@@ -350,6 +355,16 @@ create policy "Shop owners update their sales" on public.sales
     )
   )
   with check (
+    exists (
+      select 1 from public.shops
+      where shops.id = sales.shop_id and shops.owner_id = auth.uid()
+    )
+  );
+
+-- Owners can void / delete mistaken sales entirely.
+drop policy if exists "Shop owners delete their sales" on public.sales;
+create policy "Shop owners delete their sales" on public.sales
+  for delete to authenticated using (
     exists (
       select 1 from public.shops
       where shops.id = sales.shop_id and shops.owner_id = auth.uid()

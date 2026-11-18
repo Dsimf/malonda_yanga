@@ -962,7 +962,7 @@ class _ProductForm extends StatelessWidget {
           trailingColor: ShopColors.primary,
           onTrailingTap: () => showShopMessage(
             context,
-            'Letter sizes: S–XXL. Numeric sizes: 28–40.',
+            'Letter sizes: S–5XL. Numeric sizes: 28–45.',
           ),
         ),
         const SizedBox(height: 5),
@@ -1304,7 +1304,18 @@ class _FieldHeading extends StatelessWidget {
 const _kLetterSizes = ['S', 'M', 'L', 'XL', 'XXL', '3XL', '4XL', '5XL'];
 
 /// Numeric sizes offered on the add-product size dropdown.
-const _kNumericSizes = ['28', '30', '32', '34', '36', '38', '40'];
+const _kNumericSizes = [
+  '28',
+  '30',
+  '32',
+  '34',
+  '36',
+  '38',
+  '40',
+  '42',
+  '44',
+  '45',
+];
 
 class _ColorSwatch extends StatelessWidget {
   const _ColorSwatch({

@@ -312,6 +312,15 @@ class _ReportsPageState extends State<ReportsPage> with RouteAware {
                 const SizedBox(height: 11),
                 _SalesChartCard(days: _dailySales),
                 const SizedBox(height: 11),
+                _SalesLogCard(
+                  sales: _report?['sales'] is List
+                      ? (_report!['sales'] as List)
+                            .whereType<Map<String, dynamic>>()
+                            .toList()
+                      : const <Map<String, dynamic>>[],
+                  onDeleted: _loadReport,
+                ),
+                const SizedBox(height: 11),
                 _ProductsSoldCard(
                   selectedCategory: _selectedCategory,
                   categories: _categories,
@@ -1202,6 +1211,146 @@ class _SummaryMetric extends StatelessWidget {
       ],
     ),
   );
+}
+
+class _SalesLogCard extends StatefulWidget {
+  const _SalesLogCard({required this.sales, required this.onDeleted});
+
+  final List<Map<String, dynamic>> sales;
+  final VoidCallback onDeleted;
+
+  @override
+  State<_SalesLogCard> createState() => _SalesLogCardState();
+}
+
+class _SalesLogCardState extends State<_SalesLogCard> {
+  bool _deleting = false;
+
+  Future<void> _deleteSale(Map<String, dynamic> sale) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete sale?'),
+        content: Text(
+          'This removes the K${(sale['total'] as num?)?.toStringAsFixed(2) ?? '0'} '
+          'record permanently. Sold stock will not be returned automatically.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(backgroundColor: ShopColors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _deleting = true);
+    try {
+      await ApiClient.deleteSale(sale['id'] as String);
+      if (!mounted) return;
+      showShopMessage(context, 'Sale deleted.');
+      widget.onDeleted();
+    } on ApiException catch (error) {
+      if (mounted) showShopMessage(context, error.message);
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sales = widget.sales;
+    return _ReportCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Sales Log',
+            style: TextStyle(
+              color: ShopColors.text,
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 2),
+          const Text(
+            'Tap the bin to void a mistaken sale',
+            style: TextStyle(color: ShopColors.muted, fontSize: 10),
+          ),
+          const SizedBox(height: 8),
+          if (_deleting) const LinearProgressIndicator(),
+          if (sales.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 14),
+              child: Center(
+                child: Text(
+                  'No sales recorded in this period.',
+                  style: TextStyle(color: ShopColors.muted, fontSize: 11),
+                ),
+              ),
+            ),
+          for (final sale in sales)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: const BoxDecoration(
+                border: Border(bottom: BorderSide(color: ShopColors.pale)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${sale['payment_method'] ?? 'Sale'} • '
+                          '${sale['sale_type'] ?? 'Walk-in'}',
+                          style: const TextStyle(
+                            color: ShopColors.text,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        Text(
+                          sale['sold_at']?.toString().substring(0, 16) ?? '',
+                          style: const TextStyle(
+                            color: ShopColors.muted,
+                            fontSize: 9,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    'K${(sale['total'] as num?)?.toStringAsFixed(2) ?? '0'}',
+                    style: const TextStyle(
+                      color: ShopColors.text,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  IconButton(
+                    key: Key('deleteSale${sale['id']}'),
+                    tooltip: 'Delete sale',
+                    onPressed: _deleting ? null : () => _deleteSale(sale),
+                    icon: const Icon(
+                      Icons.delete_outline_rounded,
+                      color: ShopColors.red,
+                      size: 19,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 class _SalesChartCard extends StatefulWidget {

@@ -611,6 +611,7 @@ class _Product {
     required this.color,
     required this.cost,
     required this.imageUrl,
+    this.supplierName = '',
   });
 
   factory _Product.fromJson(Map<String, dynamic> json) {
@@ -631,6 +632,7 @@ class _Product {
       price: (json['price'] as num).toDouble(),
       stock: (json['quantity'] as num).toInt(),
       imageUrl: json['image_url'] as String? ?? '',
+      supplierName: json['supplier_name'] as String? ?? '',
       icon: isFootwear
           ? Icons.directions_run_rounded
           : isTrouser
@@ -653,6 +655,7 @@ class _Product {
   final double price;
   final int stock;
   final String imageUrl;
+  final String supplierName;
   final IconData icon;
   final Color tint;
   final Color productColor;
@@ -990,6 +993,9 @@ class _EditProductDialogState extends State<_EditProductDialog> {
   late final _cost = TextEditingController(text: widget.product.cost.toString());
   late final _price = TextEditingController(text: widget.product.price.toString());
   late final _stock = TextEditingController(text: widget.product.stock.toString());
+  late final _supplier = TextEditingController(
+    text: widget.product.supplierName,
+  );
   final _formKey = GlobalKey<FormState>();
   XFile? _newPhoto;
   bool _popped = false;
@@ -1005,6 +1011,7 @@ class _EditProductDialogState extends State<_EditProductDialog> {
       _cost,
       _price,
       _stock,
+      _supplier,
     ]) {
       controller.dispose();
     }
@@ -1249,6 +1256,11 @@ class _EditProductDialogState extends State<_EditProductDialog> {
                         number: true,
                         icon: Icons.inventory_outlined,
                       ),
+                      _field(
+                        _supplier,
+                        'Supplier name',
+                        icon: Icons.local_shipping_outlined,
+                      ),
                     ],
                   ),
                 ),
@@ -1287,6 +1299,7 @@ class _EditProductDialogState extends State<_EditProductDialog> {
                           'cost': double.parse(_cost.text),
                           'price': double.parse(_price.text),
                           'quantity': int.parse(_stock.text),
+                          'supplier_name': _supplier.text.trim(),
                           '_photo': ?_newPhoto,
                         });
                       },

@@ -116,6 +116,7 @@ class ProductCreate(BaseModel):
     cost: Decimal = Field(ge=0, max_digits=12, decimal_places=2)
     price: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
     quantity: int = Field(ge=0)
+    supplier_name: str = Field(default="", max_length=160)
 
 
 class ProductUpdate(BaseModel):
@@ -129,6 +130,7 @@ class ProductUpdate(BaseModel):
     cost: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
     price: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=2)
     quantity: int | None = Field(default=None, ge=0)
+    supplier_name: str | None = Field(default=None, max_length=160)
 
 
 class ProductImageUpload(BaseModel):
@@ -167,9 +169,12 @@ SALE_TYPES = ("Online", "Walk-in")
 
 
 class ExpenseCreate(BaseModel):
-    category: Literal["Salaries", "Rent", "Food", "Transport", "GRZ Taxes", "Other"]
+    category: Literal[
+        "Salaries", "Rent", "Food", "Transport", "Utilities", "GRZ Taxes", "Other"
+    ]
     amount: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
     note: str = Field(default="", max_length=240)
+    payment_method: str = Field(default="Cash Drawer", max_length=80)
     spent_on: date | None = None
 
 
@@ -177,10 +182,11 @@ class ExpenseUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     category: Literal[
-        "Salaries", "Rent", "Food", "Transport", "GRZ Taxes", "Other"
+        "Salaries", "Rent", "Food", "Transport", "Utilities", "GRZ Taxes", "Other"
     ] | None = None
     amount: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=2)
     note: str | None = Field(default=None, max_length=240)
+    payment_method: str | None = Field(default=None, max_length=80)
     spent_on: date | None = None
 
 
@@ -938,6 +944,27 @@ async def create_sale(
     return sale
 
 
+@app.delete("/sales/{sale_id}")
+async def delete_sale(
+    sale_id: str,
+    user: dict[str, Any] = Depends(current_user),
+    token: str = Depends(_bearer_token),
+) -> dict[str, bool]:
+    """Removes a sale and its items (cascade), restoring nothing else —
+    stock was deducted at sale time, so the shop keeper is expected to
+    restock manually if the sale was a mistake."""
+    shop = await _owned_shop(user, token)
+    rows = await _table(
+        "DELETE",
+        "sales",
+        token,
+        params={"id": f"eq.{sale_id}", "shop_id": f"eq.{shop['id']}", "select": "id"},
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Sale not found.")
+    return {"deleted": True}
+
+
 @app.get("/laybys")
 async def list_laybys(
     user: dict[str, Any] = Depends(current_user),
@@ -1276,7 +1303,9 @@ async def update_settings(
     return rows[0]
 
 
-EXPENSE_CATEGORIES = ("Salaries", "Rent", "Food", "Transport", "GRZ Taxes", "Other")
+EXPENSE_CATEGORIES = (
+    "Salaries", "Rent", "Food", "Transport", "Utilities", "GRZ Taxes", "Other"
+)
 
 
 @app.get("/expenses")
@@ -1317,6 +1346,7 @@ async def create_expense(
             "category": data.category,
             "amount": str(data.amount),
             "note": data.note.strip(),
+            "payment_method": data.payment_method.strip(),
             "spent_on": (data.spent_on or date.today()).isoformat(),
         },
     )
@@ -1334,6 +1364,8 @@ async def update_expense(
 ) -> dict[str, Any]:
     shop = await _owned_shop(user, token)
     updates = data.model_dump(exclude_unset=True, mode="json")
+    if "payment_method" in updates and updates["payment_method"] is not None:
+        updates["payment_method"] = updates["payment_method"].strip()
     if not updates:
         raise HTTPException(status_code=422, detail="Provide at least one expense field.")
     rows = await _table(
