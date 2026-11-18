@@ -454,32 +454,33 @@ class _SalesPageState extends State<SalesPage> {
             .toList(),
       });
       if (!mounted) return;
-      // ReportsPage refreshes itself via didPopNext when the user returns,
-      // so no synchronous refresh is needed here (it blocked navigation).
+      // Capture the receipt data from the cart BEFORE clearing it, then
+      // clear. ReportsPage refreshes itself via didPopNext when the user
+      // returns, so no synchronous refresh is needed here.
+      final itemsArgument = _cart.entries.map((item) {
+        final product = _productForId(item.key);
+        return {
+          'name': product.name,
+          'quantity': item.value.quantity,
+          'size': item.value.size,
+          'color': item.value.color,
+          'unitPrice': product.price,
+        };
+      }).toList();
+      final arguments = {
+        // Fall back to the locally computed totals if the RPC result
+        // didn't include them (e.g. an older function version).
+        'subtotal': _parseMoney(result['subtotal']).takeIfPositive() ?? _subtotal,
+        'discount': _parseMoney(result['discount']).takeIfPositive() ?? _discountAmount,
+        'total': _parseMoney(result['total']).takeIfPositive() ?? _total,
+        'paymentMethod': _paymentMethod,
+        'saleType': _saleType,
+        'customerName': customerName,
+        'itemCount': _itemCount,
+        'items': itemsArgument,
+      };
       if (mounted) setState(() => _cart.clear());
-      Navigator.pushNamed(
-        context,
-        '/sale/success',
-        arguments: {
-          'subtotal': _parseMoney(result['subtotal']),
-          'discount': _parseMoney(result['discount']),
-          'total': _parseMoney(result['total']),
-          'paymentMethod': _paymentMethod,
-          'saleType': _saleType,
-          'customerName': customerName,
-          'itemCount': _itemCount,
-          'items': _cart.entries.map((item) {
-            final product = _productForId(item.key);
-            return {
-              'name': product.name,
-              'quantity': item.value.quantity,
-              'size': item.value.size,
-              'color': item.value.color,
-              'unitPrice': product.price.round(),
-            };
-          }).toList(),
-        },
-      );
+      Navigator.pushNamed(context, '/sale/success', arguments: arguments);
     } on ApiException catch (error) {
       if (mounted) showShopMessage(context, error.message);
     } finally {
@@ -494,6 +495,12 @@ double _parseMoney(dynamic value) {
   if (value == null) return 0.0;
   if (value is num) return value.toDouble();
   return num.tryParse(value.toString())?.toDouble() ?? 0.0;
+}
+
+extension _MoneyFallback on double {
+  /// Returns this value when it is a usable (positive, finite) amount, or
+  /// null when the caller should fall back to a locally computed total.
+  double? takeIfPositive() => isFinite && this > 0 ? this : null;
 }
 
 class _SaleProduct {

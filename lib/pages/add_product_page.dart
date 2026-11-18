@@ -29,6 +29,7 @@ class _AddProductPageState extends State<AddProductPage> {
   final _costController = TextEditingController();
   final _priceController = TextEditingController();
   final _skuController = TextEditingController();
+  final _supplierController = TextEditingController();
   XFile? _productPhoto;
   String _category = '';
   String _supplierName = '';
@@ -69,6 +70,7 @@ class _AddProductPageState extends State<AddProductPage> {
       setState(() {
         _suppliers = [..._suppliers, supplier];
         _supplierName = supplier['name'] as String? ?? '';
+        _supplierController.text = _supplierName;
       });
       showShopMessage(context, 'Supplier added.');
     } on ApiException catch (error) {
@@ -83,6 +85,7 @@ class _AddProductPageState extends State<AddProductPage> {
     _costController.dispose();
     _priceController.dispose();
     _skuController.dispose();
+    _supplierController.dispose();
     super.dispose();
   }
 
@@ -129,20 +132,6 @@ class _AddProductPageState extends State<AddProductPage> {
       _savedColors.map((c) => jsonEncode(c)).toList(),
     );
   }
-
-  Future<String?> _promptNewCategory() async =>
-      showDialog<String>(
-        context: context,
-        builder: (_) => const TextPromptDialog(
-          title: 'New category',
-          labelText: 'Category name',
-          confirmLabel: 'Add',
-        ),
-      ).then((result) async {
-        if (result == null || result.isEmpty) return null;
-        await _rememberCategory(result);
-        return result;
-      });
 
   /// Bottom sheet that lists saved (custom) categories and lets the user
   /// delete any of them. Defaults cannot be removed.
@@ -462,6 +451,7 @@ class _AddProductPageState extends State<AddProductPage> {
                   category: _category,
                   categories: _savedCategories,
                   supplierName: _supplierName,
+                  supplierController: _supplierController,
                   suppliers: _suppliers,
                   onSupplierChanged: (value) =>
                       setState(() => _supplierName = value ?? ''),
@@ -476,10 +466,17 @@ class _AddProductPageState extends State<AddProductPage> {
                   onCategoryChanged: (value) =>
                       setState(() => _category = value),
                   onAddCategory: () async {
-                    final newCategory = await _promptNewCategory();
-                    if (newCategory != null && mounted) {
-                      setState(() => _category = newCategory);
+                    final typed = _category.trim();
+                    if (typed.isEmpty) {
+                      showShopMessage(
+                        context,
+                        'Type a category name first, then tap + to save it.',
+                      );
+                      return;
                     }
+                    await _rememberCategory(typed);
+                    if (!mounted) return;
+                    showShopMessage(context, 'Category "$typed" saved.');
                   },
                   onManageCategories: _manageCategories,
                   onNameSaved: _rememberName,
@@ -845,6 +842,7 @@ class _ProductForm extends StatelessWidget {
     required this.category,
     required this.categories,
     required this.supplierName,
+    required this.supplierController,
     required this.suppliers,
     required this.onSupplierChanged,
     required this.onAddSupplier,
@@ -876,6 +874,7 @@ class _ProductForm extends StatelessWidget {
   final String category;
   final List<String> categories;
   final String supplierName;
+  final TextEditingController supplierController;
   final List<Map<String, dynamic>> suppliers;
   final ValueChanged<String?> onSupplierChanged;
   final VoidCallback onAddSupplier;
@@ -936,101 +935,101 @@ class _ProductForm extends StatelessWidget {
           onTrailingTap: onManageCategories,
         ),
         const SizedBox(height: 6),
-        DropdownButtonFormField<String>(
-          initialValue: categories.contains(category) ? category : null,
-          hint: const Text('Select category'),
-          elevation: 12,
-          borderRadius: BorderRadius.circular(16),
-          menuMaxHeight: 320,
-          style: const TextStyle(
-            color: ShopColors.text,
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-          ),
-          icon: const Icon(
-            Icons.keyboard_arrow_down_rounded,
-            color: ShopColors.primary,
-          ),
-          dropdownColor: Colors.white,
-          decoration: _formDecoration(
-            prefixIcon: const Icon(
-              Icons.checkroom_outlined,
-              color: ShopColors.primary,
-              size: 21,
-            ),
-          ).copyWith(
-            suffixIcon: IconButton(
-              padding: EdgeInsets.zero,
-              visualDensity: VisualDensity.compact,
-              tooltip: 'Add new category',
-              onPressed: onAddCategory,
-              icon: const Icon(
-                Icons.add_circle_outline_rounded,
-                color: ShopColors.primary,
-                size: 21,
-              ),
-            ),
-          ),
-          items: categories
-              .map(
-                (item) => DropdownMenuItem(
-                  value: item,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      children: [
-                        if (item.isNotEmpty) ...[
-                          const Icon(
-                            Icons.bookmark_added_rounded,
-                            size: 15,
-                            color: ShopColors.primary,
-                          ),
-                          const SizedBox(width: 7),
-                        ],
-                        Text(item),
-                      ],
+        Autocomplete<String>(
+          initialValue: TextEditingValue(text: category),
+          optionsBuilder: (value) {
+            final query = value.text.trim().toLowerCase();
+            if (query.isEmpty) return const Iterable<String>.empty();
+            return categories.where(
+              (item) => item.toLowerCase().contains(query),
+            );
+          },
+          fieldViewBuilder:
+              (
+                context,
+                textController,
+                focusNode,
+                onFieldSubmitted,
+              ) => TextField(
+                controller: textController,
+                focusNode: focusNode,
+                textCapitalization: TextCapitalization.words,
+                onChanged: (value) => onCategoryChanged(value.trim()),
+                decoration: _formDecoration(
+                  prefixIcon: const Icon(
+                    Icons.checkroom_outlined,
+                    color: ShopColors.primary,
+                    size: 21,
+                  ),
+                  hintText: 'Type a category name e.g. Sneakers',
+                ).copyWith(
+                  suffixIcon: IconButton(
+                    padding: EdgeInsets.zero,
+                    visualDensity: VisualDensity.compact,
+                    tooltip: 'Save this category',
+                    onPressed: () {
+                      final name = textController.text.trim();
+                      if (name.isEmpty) {
+                        showShopMessage(context, 'Type a category name first.');
+                        return;
+                      }
+                      onAddCategory();
+                    },
+                    icon: const Icon(
+                      Icons.add_circle_outline_rounded,
+                      color: ShopColors.primary,
+                      size: 21,
                     ),
                   ),
                 ),
-              )
-              .toList(),
-          onChanged: (value) {
-            if (value != null) onCategoryChanged(value);
-          },
+              ),
+          optionsViewBuilder: (context, onSelected, options) => Align(
+            alignment: Alignment.topLeft,
+            child: Material(
+              elevation: 6,
+              borderRadius: BorderRadius.circular(12),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 220, maxWidth: 340),
+                child: ListView(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  children: [
+                    for (final option in options)
+                      ListTile(
+                        dense: true,
+                        leading: const Icon(
+                          Icons.bookmark_added_rounded,
+                          size: 15,
+                          color: ShopColors.primary,
+                        ),
+                        title: Text(option),
+                        onTap: () => onSelected(option),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ),
         const SizedBox(height: 12),
         _FieldHeading(title: 'Supplier'),
         const SizedBox(height: 6),
-        DropdownButtonFormField<String>(
-          initialValue: suppliers.any((s) => s['name'] == supplierName)
-              ? supplierName
-              : null,
-          hint: const Text('Select supplier (optional)'),
-          isExpanded: true,
-          elevation: 12,
-          borderRadius: BorderRadius.circular(16),
-          menuMaxHeight: 320,
-          style: const TextStyle(
-            color: ShopColors.text,
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-          ),
-          icon: const Icon(
-            Icons.keyboard_arrow_down_rounded,
-            color: ShopColors.primary,
-          ),
-          dropdownColor: Colors.white,
+        TextField(
+          controller: supplierController,
+          textCapitalization: TextCapitalization.words,
+          onChanged: (value) => onSupplierChanged(value),
           decoration: _formDecoration(
             prefixIcon: const Icon(
               Icons.local_shipping_rounded,
               color: ShopColors.primary,
               size: 21,
             ),
+            hintText: 'Type supplier name e.g. Kamwala Wholesalers',
           ).copyWith(
             suffixIcon: IconButton(
               padding: EdgeInsets.zero,
               visualDensity: VisualDensity.compact,
-              tooltip: 'Add new supplier',
+              tooltip: 'Save supplier to your suppliers list',
               onPressed: onAddSupplier,
               icon: const Icon(
                 Icons.add_circle_outline_rounded,
@@ -1039,16 +1038,6 @@ class _ProductForm extends StatelessWidget {
               ),
             ),
           ),
-          items: suppliers
-              .where((s) => (s['name'] as String? ?? '').isNotEmpty)
-              .map(
-                (s) => DropdownMenuItem(
-                  value: s['name'] as String,
-                  child: Text(s['name'] as String),
-                ),
-              )
-              .toList(),
-          onChanged: onSupplierChanged,
         ),
         const SizedBox(height: 12),
         _FieldHeading(
@@ -1595,8 +1584,10 @@ class _SaveButton extends StatelessWidget {
   );
 }
 
-InputDecoration _formDecoration({Widget? prefixIcon}) => InputDecoration(
+InputDecoration _formDecoration({Widget? prefixIcon, String? hintText}) =>
+    InputDecoration(
   prefixIcon: prefixIcon,
+  hintText: hintText,
   filled: true,
   fillColor: ShopColors.pale,
   contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
