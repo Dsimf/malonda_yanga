@@ -371,6 +371,18 @@ create policy "Shop owners delete their sales" on public.sales
     )
   );
 
+-- Cascading a sale delete removes its sale_items rows; RLS still applies to
+-- the cascaded DELETE, so without this policy the sale delete itself fails.
+drop policy if exists "Shop owners delete their sale items" on public.sale_items;
+create policy "Shop owners delete their sale items" on public.sale_items
+  for delete to authenticated using (
+    exists (
+      select 1 from public.sales
+      join public.shops on shops.id = sales.shop_id
+      where sales.id = sale_items.sale_id and shops.owner_id = auth.uid()
+    )
+  );
+
 drop policy if exists "Shop owners read their sale items" on public.sale_items;
 create policy "Shop owners read their sale items" on public.sale_items
   for select to authenticated using (

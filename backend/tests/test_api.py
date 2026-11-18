@@ -222,6 +222,23 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["total"], 216)
 
+    def test_delete_sale_is_scoped_to_signed_in_shop(self) -> None:
+        async def fake_request(method, path, **kwargs):
+            if path == "/rest/v1/shops":
+                return [SHOP]
+            if path == "/rest/v1/sales":
+                self.assertEqual(method, "DELETE")
+                self.assertEqual(kwargs["params"]["id"], "eq.sale-id")
+                self.assertEqual(kwargs["params"]["shop_id"], f"eq.{SHOP_ID}")
+                return [{"id": "sale-id"}]
+            self.fail(f"Unexpected Supabase request: {method} {path}")
+
+        with patch.object(main, "supabase_request", side_effect=fake_request):
+            response = self.client.delete("/sales/sale-id")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["deleted"])
+
     def test_reports_aggregate_selected_shop_sales_and_cost(self) -> None:
         async def fake_request(method, path, **kwargs):
             if path == "/rest/v1/shops":

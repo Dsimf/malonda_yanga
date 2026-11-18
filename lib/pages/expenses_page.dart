@@ -21,8 +21,8 @@ class _ExpensesPageState extends State<ExpensesPage> {
   String? _errorMessage;
 
   /// Selected summary period: 0 = Today, 1 = This Week, 2 = This Month,
-  /// 3 = All Time.
-  int _periodIndex = 2;
+  /// 3 = All Time. The page opens on Today so the figures match the till.
+  int _periodIndex = 0;
 
   static const _periodLabels = ['Today', 'This Week', 'This Month', 'All Time'];
 
@@ -63,23 +63,36 @@ class _ExpensesPageState extends State<ExpensesPage> {
     }
   }
 
-  Future<void> _addExpense() async {
+  Future<void> _openExpenseDialog([Map<String, dynamic>? expense]) async {
     final result = await showDialog<Map<String, String>>(
       context: context,
-      builder: (_) => const _ExpenseDialog(),
+      builder: (_) => _ExpenseDialog(expense: expense),
     );
     if (result == null || !mounted) return;
     try {
-      await ApiClient.createExpense({
-        'category': result['category']!,
-        'amount': num.tryParse(result['amount']!) ?? 0,
-        'payment_method': result['source'] ?? 'Cash Drawer',
-        'note': result['note'] ?? '',
-      });
+      if (expense == null) {
+        await ApiClient.createExpense({
+          'category': result['category']!,
+          'amount': num.tryParse(result['amount']!) ?? 0,
+          'payment_method': result['source'] ?? 'Cash Drawer',
+          'note': result['note'] ?? '',
+          'spent_on': result['spent_on'],
+        });
+      } else {
+        await ApiClient.updateExpense(expense['id'] as String, {
+          'category': result['category']!,
+          'amount': num.tryParse(result['amount']!) ?? 0,
+          'payment_method': result['source'] ?? 'Cash Drawer',
+          'note': result['note'] ?? '',
+          'spent_on': result['spent_on'],
+        });
+      }
       if (mounted) {
         showShopMessage(
           context,
-          'Logged K${result['amount']} for ${result['category']}',
+          expense == null
+              ? 'Logged K${result['amount']} for ${result['category']}'
+              : 'Expense updated',
         );
         _load();
       }
@@ -221,7 +234,7 @@ class _ExpensesPageState extends State<ExpensesPage> {
                     ),
                     FilledButton.icon(
                       key: const Key('openRecordOpexBtn'),
-                      onPressed: _addExpense,
+                      onPressed: () => _openExpenseDialog(),
                       icon: const Icon(Icons.add_rounded, size: 18),
                       label: const Text(
                         'Log OPEX',
@@ -533,15 +546,41 @@ class _ExpensesPageState extends State<ExpensesPage> {
                               ),
                             ],
                           ),
-                          IconButton(
-                            tooltip: 'Delete expense',
-                            onPressed: () =>
-                                _deleteExpense(expense['id'] as String),
-                            icon: const Icon(
-                              Icons.delete_outline_rounded,
-                              color: ShopColors.red,
-                              size: 20,
-                            ),
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                tooltip: 'Edit expense',
+                                onPressed: () => _openExpenseDialog(expense),
+                                padding: EdgeInsets.zero,
+                                visualDensity: VisualDensity.compact,
+                                constraints: const BoxConstraints(
+                                  minWidth: 32,
+                                  minHeight: 30,
+                                ),
+                                icon: const Icon(
+                                  Icons.edit_outlined,
+                                  color: ShopColors.primary,
+                                  size: 18,
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Delete expense',
+                                onPressed: () =>
+                                    _deleteExpense(expense['id'] as String),
+                                padding: EdgeInsets.zero,
+                                visualDensity: VisualDensity.compact,
+                                constraints: const BoxConstraints(
+                                  minWidth: 32,
+                                  minHeight: 30,
+                                ),
+                                icon: const Icon(
+                                  Icons.delete_outline_rounded,
+                                  color: ShopColors.red,
+                                  size: 18,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -599,17 +638,27 @@ class _ExpensesHeader extends StatelessWidget {
 }
 
 class _ExpenseDialog extends StatefulWidget {
-  const _ExpenseDialog();
+  const _ExpenseDialog({this.expense});
+
+  /// When provided the pop-up pre-fills and edits that record instead of
+  /// creating a new one.
+  final Map<String, dynamic>? expense;
 
   @override
   State<_ExpenseDialog> createState() => _ExpenseDialogState();
 }
 
 class _ExpenseDialogState extends State<_ExpenseDialog> {
-  final _amountController = TextEditingController();
-  final _noteController = TextEditingController();
-  String _source = 'Cash Drawer';
-  String _expenseCategory = 'Salaries';
+  late final _amountController = TextEditingController(
+    text: _initialAmount,
+  );
+  late final _noteController = TextEditingController(
+    text: widget.expense?['note'] as String? ?? '',
+  );
+  late String _source = _initialSource;
+  late String _expenseCategory = _initialCategory;
+  late DateTime _spentOn = _initialDate;
+  bool _popped = false;
 
   static const _sources = [
     'Cash Drawer',
@@ -628,6 +677,37 @@ class _ExpenseDialogState extends State<_ExpenseDialog> {
     'Other',
   ];
 
+  String get _initialAmount {
+    final amount = (widget.expense?['amount'] as num?)?.toDouble();
+    return amount == null ? '' : amount.toStringAsFixed(2);
+  }
+
+  String get _initialSource {
+    final stored = widget.expense?['payment_method'] as String? ?? '';
+    return stored.isEmpty || !_sources.contains(stored)
+        ? 'Cash Drawer'
+        : stored;
+  }
+
+  String get _initialCategory {
+    final stored = widget.expense?['category'] as String? ?? '';
+    return stored.isEmpty ? 'Salaries' : stored;
+  }
+
+  DateTime get _initialDate {
+    final raw = widget.expense?['spent_on'];
+    final parsed = raw is String ? DateTime.tryParse(raw) : null;
+    if (parsed == null) return DateTime.now();
+    return DateTime(parsed.year, parsed.month, parsed.day);
+  }
+
+  /// Dropdown options that keep values already stored on the record, so
+  /// editing an older/custom entry never silently changes it.
+  List<String> _options(List<String> base, String current) =>
+      current.isEmpty || base.contains(current)
+      ? base
+      : [current, ...base];
+
   @override
   void dispose() {
     _amountController.dispose();
@@ -635,78 +715,117 @@ class _ExpenseDialogState extends State<_ExpenseDialog> {
     super.dispose();
   }
 
+  void _pop(Map<String, String>? result) {
+    if (_popped) return;
+    _popped = true;
+    Navigator.pop(context, result);
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _spentOn,
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
+    );
+    if (picked != null) setState(() => _spentOn = picked);
+  }
+
   @override
-  Widget build(BuildContext context) => ShopPopup(
-    title: 'Record shop expense',
-    icon: Icons.receipt_long_outlined,
-    content: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        DropdownButtonFormField<String>(
-          initialValue: _expenseCategory,
-          isExpanded: true,
-          items: _expenseCategories
-              .map(
-                (category) => DropdownMenuItem(
-                  value: category,
-                  child: Text(category),
+  Widget build(BuildContext context) {
+    final editing = widget.expense != null;
+    return ShopPopup(
+      title: editing ? 'Edit expense' : 'Record shop expense',
+      icon: Icons.receipt_long_outlined,
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          DropdownButtonFormField<String>(
+            initialValue: _expenseCategory,
+            isExpanded: true,
+            items: _options(_expenseCategories, _expenseCategory)
+                .map(
+                  (category) => DropdownMenuItem(
+                    value: category,
+                    child: Text(category),
+                  ),
+                )
+                .toList(),
+            onChanged: (value) {
+              if (value != null) setState(() => _expenseCategory = value);
+            },
+            decoration: shopFieldDecoration('Category'),
+          ),
+          const SizedBox(height: 9),
+          TextField(
+            controller: _amountController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: shopFieldDecoration('Amount (K)'),
+          ),
+          const SizedBox(height: 9),
+          DropdownButtonFormField<String>(
+            initialValue: _source,
+            isExpanded: true,
+            items: _options(_sources, _source)
+                .map(
+                  (source) =>
+                      DropdownMenuItem(value: source, child: Text(source)),
+                )
+                .toList(),
+            onChanged: (value) {
+              if (value != null) setState(() => _source = value);
+            },
+            decoration: shopFieldDecoration('Paid Via'),
+          ),
+          const SizedBox(height: 9),
+          InkWell(
+            onTap: _pickDate,
+            borderRadius: BorderRadius.circular(13),
+            child: InputDecorator(
+              decoration: shopFieldDecoration(
+                'Date',
+                icon: Icons.calendar_today_outlined,
+              ),
+              child: Text(
+                DateFormat('d MMM yyyy').format(_spentOn),
+                style: const TextStyle(
+                  color: ShopColors.text,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
                 ),
-              )
-              .toList(),
-          onChanged: (value) {
-            if (value != null) setState(() => _expenseCategory = value);
-          },
-          decoration: shopFieldDecoration('Category'),
-        ),
-        const SizedBox(height: 9),
-        TextField(
-          controller: _amountController,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: shopFieldDecoration('Amount (K)'),
-        ),
-        const SizedBox(height: 9),
-        DropdownButtonFormField<String>(
-          initialValue: _source,
-          isExpanded: true,
-          items: _sources
-              .map(
-                (source) =>
-                    DropdownMenuItem(value: source, child: Text(source)),
-              )
-              .toList(),
-          onChanged: (value) {
-            if (value != null) setState(() => _source = value);
-          },
-          decoration: shopFieldDecoration('Paid Via'),
-        ),
-        const SizedBox(height: 9),
-        TextField(
-          controller: _noteController,
-          decoration: shopFieldDecoration('Notes / Voucher Reference'),
-        ),
-      ],
-    ),
-    footer: ShopPopupActions(
-      confirmLabel: 'Save & Log Expense',
-      onCancel: () => Navigator.pop(context),
-      onConfirm: () {
-        final category = _expenseCategory.trim();
-        if (category.isEmpty) {
-          showShopMessage(context, 'Choose a category for this expense.');
-          return;
-        }
-        final amount = num.tryParse(_amountController.text.trim());
-        if (amount == null || amount <= 0) {
-          showShopMessage(context, 'Enter a valid amount.');
-          return;
-        }
-        Navigator.pop(context, {
-          'category': category,
-          'amount': _amountController.text.trim(),
-          'source': _source,
-          'note': _noteController.text.trim(),
-        });
-      },
-    ),
-  );
+              ),
+            ),
+          ),
+          const SizedBox(height: 9),
+          TextField(
+            controller: _noteController,
+            decoration: shopFieldDecoration('Notes / Voucher Reference'),
+          ),
+        ],
+      ),
+      footer: ShopPopupActions(
+        confirmLabel: editing ? 'Save changes' : 'Save & Log Expense',
+        onCancel: () => _pop(null),
+        onConfirm: () {
+          final category = _expenseCategory.trim();
+          if (category.isEmpty) {
+            showShopMessage(context, 'Choose a category for this expense.');
+            return;
+          }
+          final amount = num.tryParse(_amountController.text.trim());
+          if (amount == null || amount <= 0) {
+            showShopMessage(context, 'Enter a valid amount.');
+            return;
+          }
+          _pop({
+            'category': category,
+            'amount': _amountController.text.trim(),
+            'source': _source,
+            'note': _noteController.text.trim(),
+            'spent_on': DateFormat('yyyy-MM-dd').format(_spentOn),
+          });
+        },
+      ),
+    );
+  }
 }

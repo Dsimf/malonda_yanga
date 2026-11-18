@@ -213,6 +213,11 @@ class ApiClient {
     Map<String, Object?> data,
   ) async => (await _send('POST', '/expenses', body: data)) as Map<String, dynamic>;
 
+  static Future<Map<String, dynamic>> updateExpense(
+    String id,
+    Map<String, Object?> data,
+  ) async => (await _send('PATCH', '/expenses/$id', body: data)) as Map<String, dynamic>;
+
   static Future<void> deleteExpense(String id) async {
     await _send('DELETE', '/expenses/$id');
   }
