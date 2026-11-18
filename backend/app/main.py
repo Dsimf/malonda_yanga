@@ -540,6 +540,19 @@ async def _user_role(user: dict[str, Any], token: str) -> str | None:
     )
     if rows:
         return rows[0].get("role")
+    # Fallback: if the user owns a shop, they're an owner.
+    owned = await supabase_request(
+        "GET",
+        "/rest/v1/shops",
+        token=token,
+        params={
+            "select": "id",
+            "owner_id": f"eq.{user['id']}",
+            "limit": "1",
+        },
+    )
+    if owned:
+        return "owner"
     metadata = user.get("user_metadata") or {}
     return metadata.get("role")
 
@@ -644,6 +657,7 @@ async def register(data: ShopRegistration) -> dict[str, Any]:
                 "phone": data.phone,
                 "location": data.location,
                 "business_type": data.business_type,
+                "role": "owner",
             },
         },
     )
