@@ -554,7 +554,11 @@ async def _user_role(user: dict[str, Any], token: str) -> str | None:
     if owned:
         return "owner"
     metadata = user.get("user_metadata") or {}
-    return metadata.get("role")
+    role = metadata.get("role")
+    # Final fallback: if user has any shop in metadata, they're an owner.
+    if not role and metadata.get("shop_id"):
+        return "owner"
+    return role
 
 
 async def current_user_role(
