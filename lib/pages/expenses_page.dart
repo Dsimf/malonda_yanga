@@ -2,13 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../services/api_client.dart';
-import '../services/urban7_branding.dart';
 import '../widgets/shop_dialogs.dart';
 import '../widgets/shop_ui.dart';
 
-/// Operating-expenses manager ("Daily Outgoings"). Categories: Salaries,
-/// Rent, Food, Transport, Utilities (ZESCO), GRZ Taxes and Other.
-/// Feeds the Net Profit figure on the reports page.
+/// Operating-expenses manager ("Daily Outgoings"). Categories are fully
+/// user-defined (no built-in defaults). Feeds the Net Profit figure on the
+/// reports page.
 class ExpensesPage extends StatefulWidget {
   const ExpensesPage({super.key});
 
