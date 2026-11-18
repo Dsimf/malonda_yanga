@@ -288,42 +288,41 @@ insert into storage.buckets (id, name, public)
 values ('shop-logos', 'shop-logos', true)
 on conflict (id) do update set public = true;
 
+-- Logos are uploaded with the owner's access token. The check runs as the
+-- function owner so it does not depend on shops RLS being readable inside
+-- storage.objects policies.
+create or replace function public.shop_logo_owner(object_name text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.shops
+    where shops.id::text = split_part(object_name, '/', 1)
+      and shops.owner_id = auth.uid()
+  );
+$$;
+revoke all on function public.shop_logo_owner(text) from public;
+grant execute on function public.shop_logo_owner(text) to authenticated;
+
 drop policy if exists "Shop owners read shop logos" on storage.objects;
 create policy "Shop owners read shop logos" on storage.objects
   for select to authenticated using (
-    bucket_id = 'shop-logos'
-    and exists (
-      select 1 from public.shops
-      where shops.id::text = split_part(name, '/', 1)
-        and shops.owner_id = auth.uid()
-    )
+    bucket_id = 'shop-logos' and public.shop_logo_owner(name)
   );
 drop policy if exists "Shop owners upload shop logos" on storage.objects;
 create policy "Shop owners upload shop logos" on storage.objects
   for insert to authenticated with check (
-    bucket_id = 'shop-logos'
-    and exists (
-      select 1 from public.shops
-      where shops.id::text = split_part(name, '/', 1)
-        and shops.owner_id = auth.uid()
-    )
+    bucket_id = 'shop-logos' and public.shop_logo_owner(name)
   );
 drop policy if exists "Shop owners update shop logos" on storage.objects;
 create policy "Shop owners update shop logos" on storage.objects
   for update to authenticated using (
-    bucket_id = 'shop-logos'
-    and exists (
-      select 1 from public.shops
-      where shops.id::text = split_part(name, '/', 1)
-        and shops.owner_id = auth.uid()
-    )
+    bucket_id = 'shop-logos' and public.shop_logo_owner(name)
   ) with check (
-    bucket_id = 'shop-logos'
-    and exists (
-      select 1 from public.shops
-      where shops.id::text = split_part(name, '/', 1)
-        and shops.owner_id = auth.uid()
-    )
+    bucket_id = 'shop-logos' and public.shop_logo_owner(name)
   );
 
 -- ---------------- Expense policies (owner-only via the shops owner link) ----

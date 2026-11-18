@@ -284,18 +284,34 @@ def _service_role_key() -> str:
     /auth/v1/admin/* endpoints (create/delete admin users) require the
     service_role key, not the anon key and not a user's access token. The anon
     key is intentionally rejected here because it cannot administer auth users.
+    Both the new secret keys (sb_secret_...) and the legacy service_role JWT
+    (eyJ...) are accepted.
     """
     config = get_settings()
     key = config.supabase_service_role_key.strip()
-    if not key or not key.startswith("sb_secret_"):
+    if not key or not (key.startswith("sb_secret_") or key.startswith("eyJ")):
         raise HTTPException(
             status_code=503,
             detail=(
                 "Configure SUPABASE_SERVICE_ROLE_KEY with the Supabase service "
-                "role key (sb_secret_...) to create employee logins."
+                "role key (sb_secret_... or the legacy eyJ... JWT) to create "
+                "employee logins."
             ),
         )
     return key
+
+
+def _storage_admin_jwt() -> str:
+    """Returns a service_role JWT usable against the Storage API, if present.
+
+    Supabase Storage validates the Authorization header as a JWT and rejects
+    the new sb_secret_... API keys with "Invalid Compact JWS". Only a legacy
+    service_role JWT (eyJ...) can bypass storage RLS, so it is used when the
+    configured key has that form; otherwise uploads fall back to the signed-in
+    user's access token and the storage policies.
+    """
+    key = get_settings().supabase_service_role_key.strip()
+    return key if key.startswith("eyJ") else ""
 
 
 async def supabase_request(
@@ -381,11 +397,15 @@ async def supabase_request(
 
 
 async def _ensure_public_bucket(bucket: str) -> None:
-    """Creates the storage bucket (or makes it public) with the service role.
+    """Best-effort: creates the storage bucket or makes it public.
 
-    Logos must stay readable from receipts/headers, and this keeps the
-    feature working even when the SQL migration has not been applied yet.
+    Bucket admin calls need a legacy service_role JWT; the new sb_secret_...
+    keys are rejected by Storage. Failures are logged and ignored so the
+    upload itself still runs with the caller's token and the bucket/policies
+    created by backend/supabase/schema.sql.
     """
+    if not _storage_admin_jwt():
+        return
     try:
         await supabase_request(
             "PUT",
@@ -393,18 +413,22 @@ async def _ensure_public_bucket(bucket: str) -> None:
             admin=True,
             body={"public": True},
         )
-    except HTTPException:
-        try:
-            await supabase_request(
-                "POST",
-                "/storage/v1/bucket",
-                admin=True,
-                body={"id": bucket, "name": bucket, "public": True},
-            )
-        except HTTPException as error:
-            # Another request may have created it between the PUT and POST.
-            if error.status_code not in (400, 409):
-                raise
+        return
+    except HTTPException as error:
+        print(f"Storage bucket update failed for '{bucket}': "
+              f"{error.status_code} {error.detail}", flush=True)
+    try:
+        await supabase_request(
+            "POST",
+            "/storage/v1/bucket",
+            admin=True,
+            body={"id": bucket, "name": bucket, "public": True},
+        )
+    except HTTPException as error:
+        # Another request may have created it between the PUT and POST.
+        if error.status_code not in (400, 409):
+            print(f"Storage bucket create failed for '{bucket}': "
+                  f"{error.status_code} {error.detail}", flush=True)
 
 
 async def supabase_upload(
@@ -413,21 +437,22 @@ async def supabase_upload(
     token: str,
     content: bytes,
     content_type: str,
-    admin: bool = False,
 ) -> None:
     url, key = _configuration()
-    if admin:
-        # The service role bypasses storage.objects RLS, so uploads that
-        # depend on newly-added bucket policies work even before the
-        # migration has been applied to the live project.
-        service_key = _service_role_key()
+    service_jwt = _storage_admin_jwt()
+    if service_jwt:
+        # A legacy service_role JWT is the only key Storage accepts for
+        # bypassing storage.objects RLS.
         headers = {
-            "apikey": service_key,
-            "Authorization": f"Bearer {service_key}",
+            "apikey": service_jwt,
+            "Authorization": f"Bearer {service_jwt}",
             "Content-Type": content_type,
             "x-upsert": "true",
         }
     else:
+        # New secret keys are not JWTs, so the user's access token is the only
+        # credential Storage will verify; RLS is enforced by the storage
+        # policies in backend/supabase/schema.sql.
         headers = {
             "apikey": key,
             "Authorization": f"Bearer {token}",
@@ -1554,27 +1579,13 @@ async def upload_shop_logo(
     }[data.content_type]
     object_path = f"{shop['id']}/logo.{extension}"
     object_key = f"shop-logos/{object_path}"
-    try:
-        await _ensure_public_bucket("shop-logos")
-        await supabase_upload(
-            object_key,
-            token=token,
-            content=image,
-            content_type=data.content_type,
-            admin=True,
-        )
-    except HTTPException as error:
-        # No service role key configured: fall back to the owner's token and
-        # rely on the shop-logos storage policies from schema.sql.
-        if error.status_code == 503:
-            await supabase_upload(
-                object_key,
-                token=token,
-                content=image,
-                content_type=data.content_type,
-            )
-        else:
-            raise
+    await _ensure_public_bucket("shop-logos")
+    await supabase_upload(
+        object_key,
+        token=token,
+        content=image,
+        content_type=data.content_type,
+    )
     config = get_settings()
     logo_url = (
         f"{config.supabase_url.rstrip('/')}/storage/v1/object/public/"
@@ -1585,20 +1596,11 @@ async def upload_shop_logo(
             "PATCH",
             "/rest/v1/shops",
             token=token,
-            admin=True,
             params={"id": f"eq.{shop['id']}", "select": "*"},
             body={"logo_url": logo_url},
         )
     except HTTPException as error:
-        if error.status_code == 503:
-            rows = await _table(
-                "PATCH",
-                "shops",
-                token,
-                params={"id": f"eq.{shop['id']}", "select": "*"},
-                body={"logo_url": logo_url},
-            )
-        elif error.status_code == 400 and "logo_url" in str(error.detail):
+        if error.status_code == 400 and "logo_url" in str(error.detail):
             raise HTTPException(
                 status_code=500,
                 detail=(
