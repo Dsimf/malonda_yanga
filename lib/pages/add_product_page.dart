@@ -38,6 +38,7 @@ class _AddProductPageState extends State<AddProductPage> {
   String _selectedColor = 'Black';
   int _quantity = 50;
   bool _saving = false;
+  int _supplierAutoKey = 0;
   List<String> _savedNames = [];
   List<String> _savedCategories = [];
   List<Map<String, String>> _savedColors = [];
@@ -71,6 +72,7 @@ class _AddProductPageState extends State<AddProductPage> {
         _suppliers = [..._suppliers, supplier];
         _supplierName = supplier['name'] as String? ?? '';
         _supplierController.text = _supplierName;
+        _supplierAutoKey++;
       });
       showShopMessage(context, 'Supplier added.');
     } on ApiException catch (error) {
@@ -456,6 +458,7 @@ class _AddProductPageState extends State<AddProductPage> {
                   onSupplierChanged: (value) =>
                       setState(() => _supplierName = value ?? ''),
                   onAddSupplier: _addSupplier,
+                  supplierAutoKey: _supplierAutoKey,
                   savedNames: _savedNames,
                   savedColors: _savedColors,
                   selectedSize: _selectedSize,
@@ -847,6 +850,7 @@ class _ProductForm extends StatelessWidget {
     required this.suppliers,
     required this.onSupplierChanged,
     required this.onAddSupplier,
+    required this.supplierAutoKey,
     required this.savedNames,
     required this.savedColors,
     required this.selectedSize,
@@ -879,6 +883,7 @@ class _ProductForm extends StatelessWidget {
   final List<Map<String, dynamic>> suppliers;
   final ValueChanged<String?> onSupplierChanged;
   final VoidCallback onAddSupplier;
+  final int supplierAutoKey;
   final List<String> savedNames;
   final List<Map<String, String>> savedColors;
   final String selectedSize;
@@ -1015,27 +1020,74 @@ class _ProductForm extends StatelessWidget {
         const SizedBox(height: 12),
         _FieldHeading(title: 'Supplier'),
         const SizedBox(height: 6),
-        TextField(
-          controller: supplierController,
-          textCapitalization: TextCapitalization.words,
-          onChanged: (value) => onSupplierChanged(value),
-          decoration: _formDecoration(
-            prefixIcon: const Icon(
-              Icons.local_shipping_rounded,
-              color: ShopColors.primary,
-              size: 21,
-            ),
-            hintText: 'Type supplier name e.g. Kamwala Wholesalers',
-          ).copyWith(
-            suffixIcon: IconButton(
-              padding: EdgeInsets.zero,
-              visualDensity: VisualDensity.compact,
-              tooltip: 'Save supplier to your suppliers list',
-              onPressed: onAddSupplier,
-              icon: const Icon(
-                Icons.add_circle_outline_rounded,
+        Autocomplete<String>(
+          key: ValueKey('supplier-$supplierAutoKey'),
+          initialValue: TextEditingValue(text: supplierName),
+          optionsBuilder: (value) {
+            final query = value.text.trim().toLowerCase();
+            final names = suppliers
+                .map((s) => s['name'] as String? ?? '')
+                .toSet()
+                .toList();
+            if (query.isEmpty) return names;
+            return names
+                .where((n) => n.toLowerCase().contains(query))
+                .toList();
+          },
+          fieldViewBuilder: (
+            context,
+            textController,
+            focusNode,
+            onFieldSubmitted,
+          ) => TextField(
+            controller: textController,
+            textCapitalization: TextCapitalization.words,
+            onChanged: (value) => onSupplierChanged(value.trim()),
+            decoration: _formDecoration(
+              prefixIcon: const Icon(
+                Icons.local_shipping_rounded,
                 color: ShopColors.primary,
                 size: 21,
+              ),
+              hintText: 'Type or select a supplier',
+            ).copyWith(
+              suffixIcon: IconButton(
+                padding: EdgeInsets.zero,
+                visualDensity: VisualDensity.compact,
+                tooltip: 'Save supplier to your suppliers list',
+                onPressed: onAddSupplier,
+                icon: const Icon(
+                  Icons.add_circle_outline_rounded,
+                  color: ShopColors.primary,
+                  size: 21,
+                ),
+              ),
+            ),
+          ),
+          optionsViewBuilder: (context, onSelected, options) => Align(
+            alignment: Alignment.topLeft,
+            child: Material(
+              elevation: 6,
+              borderRadius: BorderRadius.circular(12),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 220, maxWidth: 340),
+                child: ListView(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  children: [
+                    for (final option in options)
+                      ListTile(
+                        dense: true,
+                        leading: const Icon(
+                          Icons.local_shipping_rounded,
+                          size: 15,
+                          color: ShopColors.primary,
+                        ),
+                        title: Text(option),
+                        onTap: () => onSelected(option),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),

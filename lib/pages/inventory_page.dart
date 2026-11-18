@@ -755,6 +755,20 @@ class _ProductCard extends StatelessWidget {
                 fontSize: 23,
               ),
             ),
+            if (product.supplierName.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  'Supplier: ${product.supplierName}',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: ShopColors.muted,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             const SizedBox(height: 5),
             Row(
               children: [

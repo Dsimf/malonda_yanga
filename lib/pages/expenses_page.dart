@@ -610,8 +610,8 @@ class _ExpenseDialog extends StatefulWidget {
 class _ExpenseDialogState extends State<_ExpenseDialog> {
   final _amountController = TextEditingController();
   final _noteController = TextEditingController();
-  final _categoryController = TextEditingController();
   String _source = 'Cash Drawer';
+  String _expenseCategory = 'Salaries';
 
   static const _sources = [
     'Cash Drawer',
@@ -620,11 +620,20 @@ class _ExpenseDialogState extends State<_ExpenseDialog> {
     'Zanaco / Bank',
   ];
 
+  static const _expenseCategories = [
+    'Salaries',
+    'Rent',
+    'Food',
+    'Transport',
+    'Utilities',
+    'GRZ Taxes',
+    'Other',
+  ];
+
   @override
   void dispose() {
     _amountController.dispose();
     _noteController.dispose();
-    _categoryController.dispose();
     super.dispose();
   }
 
@@ -635,12 +644,21 @@ class _ExpenseDialogState extends State<_ExpenseDialog> {
     content: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        TextField(
-          controller: _categoryController,
-          textCapitalization: TextCapitalization.words,
-          decoration: shopFieldDecoration(
-            'Category (e.g. Rent, Transport, Salaries...)',
-          ),
+        DropdownButtonFormField<String>(
+          value: _expenseCategory,
+          isExpanded: true,
+          items: _expenseCategories
+              .map(
+                (category) => DropdownMenuItem(
+                  value: category,
+                  child: Text(category),
+                ),
+              )
+              .toList(),
+          onChanged: (value) {
+            if (value != null) setState(() => _expenseCategory = value);
+          },
+          decoration: shopFieldDecoration('Category'),
         ),
         const SizedBox(height: 9),
         TextField(
@@ -674,9 +692,9 @@ class _ExpenseDialogState extends State<_ExpenseDialog> {
       confirmLabel: 'Save & Log Expense',
       onCancel: () => Navigator.pop(context),
       onConfirm: () {
-        final category = _categoryController.text.trim();
+        final category = _expenseCategory.trim();
         if (category.isEmpty) {
-          showShopMessage(context, 'Enter a category for this expense.');
+          showShopMessage(context, 'Choose a category for this expense.');
           return;
         }
         final amount = num.tryParse(_amountController.text.trim());
