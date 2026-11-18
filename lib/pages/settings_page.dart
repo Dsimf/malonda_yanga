@@ -53,7 +53,9 @@ class _SettingsPageState extends State<SettingsPage> {
       }
       shopProfile.apply(updated);
       if (!mounted) return;
-      setState(() => _shop = Future.value(updated));
+      setState(() {
+        _shop = Future.value(updated);
+      });
       showShopMessage(context, 'Shop information updated.');
     } on ApiException catch (error) {
       if (mounted) showShopMessage(context, error.message);
