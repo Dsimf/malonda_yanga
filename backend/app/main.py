@@ -169,9 +169,7 @@ SALE_TYPES = ("Online", "Walk-in")
 
 
 class ExpenseCreate(BaseModel):
-    category: Literal[
-        "Salaries", "Rent", "Food", "Transport", "Utilities", "GRZ Taxes", "Other"
-    ]
+    category: str = Field(min_length=1, max_length=80)
     amount: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
     note: str = Field(default="", max_length=240)
     payment_method: str = Field(default="Cash Drawer", max_length=80)
@@ -181,9 +179,7 @@ class ExpenseCreate(BaseModel):
 class ExpenseUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    category: Literal[
-        "Salaries", "Rent", "Food", "Transport", "Utilities", "GRZ Taxes", "Other"
-    ] | None = None
+    category: str | None = Field(default=None, min_length=1, max_length=80)
     amount: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=2)
     note: str | None = Field(default=None, max_length=240)
     payment_method: str | None = Field(default=None, max_length=80)

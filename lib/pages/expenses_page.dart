@@ -611,7 +611,7 @@ class _ExpenseDialog extends StatefulWidget {
 class _ExpenseDialogState extends State<_ExpenseDialog> {
   final _amountController = TextEditingController();
   final _noteController = TextEditingController();
-  String _category = Urban7.expenseCategories.first;
+  final _categoryController = TextEditingController();
   String _source = 'Cash Drawer';
 
   static const _sources = [
@@ -625,6 +625,7 @@ class _ExpenseDialogState extends State<_ExpenseDialog> {
   void dispose() {
     _amountController.dispose();
     _noteController.dispose();
+    _categoryController.dispose();
     super.dispose();
   }
 
@@ -635,19 +636,12 @@ class _ExpenseDialogState extends State<_ExpenseDialog> {
     content: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        DropdownButtonFormField<String>(
-          initialValue: _category,
-          isExpanded: true,
-          items: Urban7.expenseCategories
-              .map(
-                (category) =>
-                    DropdownMenuItem(value: category, child: Text(category)),
-              )
-              .toList(),
-          onChanged: (value) {
-            if (value != null) setState(() => _category = value);
-          },
-          decoration: shopFieldDecoration('Category'),
+        TextField(
+          controller: _categoryController,
+          textCapitalization: TextCapitalization.words,
+          decoration: shopFieldDecoration(
+            'Category (e.g. Rent, Transport, Salaries...)',
+          ),
         ),
         const SizedBox(height: 9),
         TextField(
@@ -681,13 +675,18 @@ class _ExpenseDialogState extends State<_ExpenseDialog> {
       confirmLabel: 'Save & Log Expense',
       onCancel: () => Navigator.pop(context),
       onConfirm: () {
+        final category = _categoryController.text.trim();
+        if (category.isEmpty) {
+          showShopMessage(context, 'Enter a category for this expense.');
+          return;
+        }
         final amount = num.tryParse(_amountController.text.trim());
         if (amount == null || amount <= 0) {
           showShopMessage(context, 'Enter a valid amount.');
           return;
         }
         Navigator.pop(context, {
-          'category': _category,
+          'category': category,
           'amount': _amountController.text.trim(),
           'source': _source,
           'note': _noteController.text.trim(),

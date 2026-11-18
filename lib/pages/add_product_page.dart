@@ -23,14 +23,6 @@ const _kSavedNames = 'savedProductNames';
 const _kSavedCategories = 'savedCategories';
 const _kSavedColors = 'savedCustomColors';
 
-const _defaultCategories = [
-  'T-Shirts & Polos',
-  'Jackets & Hoodies',
-  'Trousers',
-  'Footwear',
-  'Accessories',
-];
-
 class _AddProductPageState extends State<AddProductPage> {
   final _nameController = TextEditingController();
   final _nameFocus = FocusNode();
@@ -38,7 +30,9 @@ class _AddProductPageState extends State<AddProductPage> {
   final _priceController = TextEditingController();
   final _skuController = TextEditingController();
   XFile? _productPhoto;
-  String _category = 'T-Shirts & Polos';
+  String _category = '';
+  String _supplierName = '';
+  List<Map<String, dynamic>> _suppliers = [];
   String _selectedSize = 'M';
   String _selectedColor = 'Black';
   int _quantity = 50;
@@ -51,6 +45,35 @@ class _AddProductPageState extends State<AddProductPage> {
   void initState() {
     super.initState();
     _loadSavedOptions();
+    _loadSuppliers();
+  }
+
+  Future<void> _loadSuppliers() async {
+    try {
+      final suppliers = await ApiClient.suppliers();
+      if (mounted) setState(() => _suppliers = suppliers);
+    } on ApiException {
+      // Supplier list is optional — the product can still be saved without one.
+    }
+  }
+
+  Future<void> _addSupplier() async {
+    final values = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (_) => const _QuickSupplierDialog(),
+    );
+    if (values == null || !mounted) return;
+    try {
+      final supplier = await ApiClient.createSupplier(values);
+      if (!mounted) return;
+      setState(() {
+        _suppliers = [..._suppliers, supplier];
+        _supplierName = supplier['name'] as String? ?? '';
+      });
+      showShopMessage(context, 'Supplier added.');
+    } on ApiException catch (error) {
+      if (mounted) showShopMessage(context, error.message);
+    }
   }
 
   @override
@@ -89,8 +112,7 @@ class _AddProductPageState extends State<AddProductPage> {
   }
 
   Future<void> _rememberCategory(String category) async {
-    if (_defaultCategories.contains(category) ||
-        _savedCategories.contains(category)) {
+    if (_savedCategories.contains(category)) {
       return;
     }
     _savedCategories = [..._savedCategories, category];
@@ -153,7 +175,7 @@ class _AddProductPageState extends State<AddProductPage> {
               const Padding(
                 padding: EdgeInsets.only(top: 4, left: 29),
                 child: Text(
-                  'Swipe-tap the bin to remove a category you added. Built-in categories cannot be removed.',
+                  'Swipe-tap the bin to remove a category you added.',
                   style: TextStyle(color: ShopColors.muted, fontSize: 11),
                 ),
               ),
@@ -255,7 +277,7 @@ class _AddProductPageState extends State<AddProductPage> {
           .where((c) => c != category)
           .toList();
       if (_category == category) {
-        _category = _defaultCategories.first;
+        _category = _savedCategories.isNotEmpty ? _savedCategories.first : '';
       }
     });
     final prefs = await SharedPreferences.getInstance();
@@ -329,6 +351,13 @@ class _AddProductPageState extends State<AddProductPage> {
       showShopMessage(context, 'Enter a SKU or barcode.');
       return;
     }
+    if (_category.trim().isEmpty) {
+      showShopMessage(
+        context,
+        'Choose a category, or add a new one with the + button.',
+      );
+      return;
+    }
     if (cost == null || !cost.isFinite || cost < 0) {
       showShopMessage(context, 'Enter a valid cost price of 0 or more.');
       return;
@@ -357,6 +386,7 @@ class _AddProductPageState extends State<AddProductPage> {
         'cost': cost,
         'price': price,
         'quantity': _quantity,
+        'supplier_name': _supplierName,
       });
       if (!mounted) return;
       if (_productPhoto != null) {
@@ -430,7 +460,12 @@ class _AddProductPageState extends State<AddProductPage> {
                   priceController: _priceController,
                   skuController: _skuController,
                   category: _category,
-                  categories: [..._defaultCategories, ..._savedCategories],
+                  categories: _savedCategories,
+                  supplierName: _supplierName,
+                  suppliers: _suppliers,
+                  onSupplierChanged: (value) =>
+                      setState(() => _supplierName = value ?? ''),
+                  onAddSupplier: _addSupplier,
                   savedNames: _savedNames,
                   savedColors: _savedColors,
                   selectedSize: _selectedSize,
@@ -809,6 +844,10 @@ class _ProductForm extends StatelessWidget {
     required this.skuController,
     required this.category,
     required this.categories,
+    required this.supplierName,
+    required this.suppliers,
+    required this.onSupplierChanged,
+    required this.onAddSupplier,
     required this.savedNames,
     required this.savedColors,
     required this.selectedSize,
@@ -836,6 +875,10 @@ class _ProductForm extends StatelessWidget {
   final TextEditingController skuController;
   final String category;
   final List<String> categories;
+  final String supplierName;
+  final List<Map<String, dynamic>> suppliers;
+  final ValueChanged<String?> onSupplierChanged;
+  final VoidCallback onAddSupplier;
   final List<String> savedNames;
   final List<Map<String, String>> savedColors;
   final String selectedSize;
@@ -936,7 +979,7 @@ class _ProductForm extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Row(
                       children: [
-                        if (!_defaultCategories.contains(item)) ...[
+                        if (item.isNotEmpty) ...[
                           const Icon(
                             Icons.bookmark_added_rounded,
                             size: 15,
@@ -954,6 +997,58 @@ class _ProductForm extends StatelessWidget {
           onChanged: (value) {
             if (value != null) onCategoryChanged(value);
           },
+        ),
+        const SizedBox(height: 12),
+        _FieldHeading(title: 'Supplier'),
+        const SizedBox(height: 6),
+        DropdownButtonFormField<String>(
+          initialValue: suppliers.any((s) => s['name'] == supplierName)
+              ? supplierName
+              : null,
+          hint: const Text('Select supplier (optional)'),
+          isExpanded: true,
+          elevation: 12,
+          borderRadius: BorderRadius.circular(16),
+          menuMaxHeight: 320,
+          style: const TextStyle(
+            color: ShopColors.text,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+          icon: const Icon(
+            Icons.keyboard_arrow_down_rounded,
+            color: ShopColors.primary,
+          ),
+          dropdownColor: Colors.white,
+          decoration: _formDecoration(
+            prefixIcon: const Icon(
+              Icons.local_shipping_rounded,
+              color: ShopColors.primary,
+              size: 21,
+            ),
+          ).copyWith(
+            suffixIcon: IconButton(
+              padding: EdgeInsets.zero,
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Add new supplier',
+              onPressed: onAddSupplier,
+              icon: const Icon(
+                Icons.add_circle_outline_rounded,
+                color: ShopColors.primary,
+                size: 21,
+              ),
+            ),
+          ),
+          items: suppliers
+              .where((s) => (s['name'] as String? ?? '').isNotEmpty)
+              .map(
+                (s) => DropdownMenuItem(
+                  value: s['name'] as String,
+                  child: Text(s['name'] as String),
+                ),
+              )
+              .toList(),
+          onChanged: onSupplierChanged,
         ),
         const SizedBox(height: 12),
         _FieldHeading(
@@ -1906,3 +2001,70 @@ class _ColorPickerDialogState extends State<_ColorPickerDialog> {
 // Reusable text prompt dialog lives in lib/widgets/barcode_scanner.dart
 // (shared with the rest of the app) as _TextPromptDialog — public there.
 // ---------------------------------------------------------------------------
+
+/// Quick add-supplier pop-up used from the Add Product page. Saves a minimal
+/// supplier record (name required, phone optional) so the product can be
+/// linked to it immediately.
+class _QuickSupplierDialog extends StatefulWidget {
+  const _QuickSupplierDialog();
+
+  @override
+  State<_QuickSupplierDialog> createState() => _QuickSupplierDialogState();
+}
+
+class _QuickSupplierDialogState extends State<_QuickSupplierDialog> {
+  final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
+  bool _popped = false;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  void _pop(Map<String, String>? result) {
+    if (_popped) return;
+    _popped = true;
+    Navigator.pop(context, result);
+  }
+
+  @override
+  Widget build(BuildContext context) => ShopPopup(
+    title: 'Add supplier',
+    icon: Icons.local_shipping_rounded,
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TextField(
+          controller: _nameController,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: shopFieldDecoration('Supplier name *'),
+        ),
+        const SizedBox(height: 9),
+        TextField(
+          controller: _phoneController,
+          keyboardType: TextInputType.phone,
+          decoration: shopFieldDecoration('Phone (optional)'),
+        ),
+      ],
+    ),
+    footer: ShopPopupActions(
+      confirmLabel: 'Save Supplier',
+      onCancel: () => _pop(null),
+      onConfirm: () {
+        final name = _nameController.text.trim();
+        if (name.isEmpty) {
+          showShopMessage(context, 'Enter the supplier name.');
+          return;
+        }
+        _pop({
+          'name': name,
+          'phone': _phoneController.text.trim(),
+        });
+      },
+    ),
+  );
+}

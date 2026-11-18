@@ -60,15 +60,4 @@ class Urban7 {
 
   /// Sale channels recorded on every sale.
   static const saleTypes = ['Walk-in', 'Online'];
-
-  /// Operating expense categories used on the expenses page.
-  static const expenseCategories = [
-    'Salaries',
-    'Rent',
-    'Food',
-    'Transport',
-    'Utilities',
-    'GRZ Taxes',
-    'Other',
-  ];
 }

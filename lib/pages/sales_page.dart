@@ -5,7 +5,6 @@ import '../services/urban7_branding.dart';
 import '../widgets/barcode_scanner.dart';
 import '../widgets/shop_dialogs.dart';
 import '../widgets/shop_ui.dart';
-import 'reports_page.dart';
 
 class SalesPage extends StatefulWidget {
   const SalesPage({super.key});
@@ -455,8 +454,9 @@ class _SalesPageState extends State<SalesPage> {
             .toList(),
       });
       if (!mounted) return;
-      // Notify any mounted ReportsPage so sales figures update immediately.
-      ReportsPage.notifyRefresh();
+      // ReportsPage refreshes itself via didPopNext when the user returns,
+      // so no synchronous refresh is needed here (it blocked navigation).
+      if (mounted) setState(() => _cart.clear());
       Navigator.pushNamed(
         context,
         '/sale/success',
