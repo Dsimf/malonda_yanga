@@ -555,21 +555,17 @@ class _ProductAppBar extends StatelessWidget {
           visualDensity: VisualDensity.compact,
         ),
         const SizedBox(width: 4),
-        Container(
-          height: 34,
-          width: 34,
-          color: Colors.white,
-          child: const Icon(
-            Icons.checkroom_outlined,
-            color: ShopColors.primary,
-            size: 21,
-          ),
-        ),
-        const SizedBox(width: 9),
         const Expanded(
-          child: Text(
-            'Product Details',
-            style: TextStyle(
+          child: ShopHeaderBrand(
+            title: 'Product Details',
+            logoSize: 34,
+            nameStyle: TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: .4,
+            ),
+            titleStyle: TextStyle(
               color: Colors.white,
               fontSize: 16,
               fontWeight: FontWeight.w800,

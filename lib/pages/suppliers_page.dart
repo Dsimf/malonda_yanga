@@ -71,7 +71,36 @@ class _SuppliersPageState extends State<SuppliersPage> {
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: ShopColors.surface,
     appBar: AppBar(
-      title: const Text('Suppliers'),
+      title: const Row(
+        children: [
+          ShopBrandLogo(size: 30),
+          SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ShopCompanyName(
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: .3,
+                  ),
+                ),
+                Text(
+                  'Suppliers',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
       backgroundColor: ShopColors.primary,
       foregroundColor: Colors.white,
       actions: [

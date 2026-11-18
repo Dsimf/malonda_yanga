@@ -1,6 +1,12 @@
-import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'dart:typed_data';
 
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+
+import '../pages/inventory_page.dart' show showImageSourceSheet;
 import '../services/api_client.dart';
+import '../services/shop_profile.dart';
 import '../services/urban7_branding.dart';
 import '../widgets/shop_dialogs.dart';
 import '../widgets/shop_ui.dart';
@@ -27,14 +33,28 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _editShop(Map<String, dynamic> shop) async {
-    final result = await showDialog<Map<String, String>>(
+    final result = await showDialog<_ShopInfoResult>(
       context: context,
       builder: (dialogContext) => _ShopInfoDialog(shop: shop),
     );
     if (result == null || !mounted) return;
     try {
-      final updated = await ApiClient.updateShopSettings(result);
-      if (mounted) setState(() => _shop = Future.value(updated));
+      var updated = await ApiClient.updateShopSettings(result.fields);
+      final logo = result.logo;
+      if (logo != null) {
+        final uploaded = await ApiClient.uploadShopLogo(
+          contentType: logo.mimeType ?? 'image/jpeg',
+          imageBase64: base64Encode(await logo.readAsBytes()),
+        );
+        final logoUrl = uploaded['logo_url'];
+        if (logoUrl is String) {
+          updated = {...updated, 'logo_url': logoUrl};
+        }
+      }
+      shopProfile.apply(updated);
+      if (!mounted) return;
+      setState(() => _shop = Future.value(updated));
+      showShopMessage(context, 'Shop information updated.');
     } on ApiException catch (error) {
       if (mounted) showShopMessage(context, error.message);
     }
@@ -166,6 +186,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     onPressed: () async {
                       try {
                         await ApiClient.logout();
+                        shopProfile.clear();
                         if (context.mounted) {
                           Navigator.pushNamedAndRemoveUntil(
                             context,
@@ -228,15 +249,31 @@ class _SettingsHeader extends StatelessWidget {
     ),
     child: Row(
       children: [
+        const ShopBrandLogo(size: 34),
+        const SizedBox(width: 9),
         const Expanded(
-          child: Text(
-            '${Urban7.appName}\n${Urban7.companyName}',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 19,
-              height: 1.15,
-              fontWeight: FontWeight.w800,
-            ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ShopCompanyName(
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: .4,
+                ),
+              ),
+              Text(
+                'Settings',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 19,
+                  height: 1.1,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
           ),
         ),
         IconButton(
@@ -293,18 +330,11 @@ class _ShopProfileCard extends StatelessWidget {
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Container(
-          height: 64,
-          width: 64,
-          decoration: BoxDecoration(
-            color: ShopColors.paleBlue,
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: const Icon(
-            Icons.storefront_rounded,
-            color: ShopColors.primary,
-            size: 36,
-          ),
+        ShopBrandLogo(
+          size: 64,
+          borderRadius: 14,
+          icon: Icons.storefront_rounded,
+          logoUrl: shop['logo_url'] as String?,
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -315,7 +345,7 @@ class _ShopProfileCard extends StatelessWidget {
                 children: [
                   Flexible(
                     child: Text(
-                      shop['name'] as String? ?? 'Shop',
+                      (shop['name'] as String?) ?? '',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -362,7 +392,7 @@ class _ShopProfileCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 4),
-                  Flexible(
+                   Flexible(
                     child: Text(
                       shop['location'] as String? ?? '',
                       maxLines: 1,
@@ -372,6 +402,36 @@ class _ShopProfileCard extends StatelessWidget {
                   ),
                 ],
               ),
+              if (((shop['contact_email'] as String?) ?? '')
+                      .trim()
+                      .isNotEmpty ||
+                  ((shop['phone'] as String?) ?? '').trim().isNotEmpty) ...[
+                const SizedBox(height: 3),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.contact_mail_outlined,
+                      size: 16,
+                      color: ShopColors.muted,
+                    ),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        [
+                          (shop['contact_email'] as String?) ?? '',
+                          (shop['phone'] as String?) ?? '',
+                        ].where((value) => value.trim().isNotEmpty).join(' • '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: ShopColors.muted,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
@@ -639,22 +699,93 @@ class _ShopInfoDialogState extends State<_ShopInfoDialog> {
   late final _location = TextEditingController(
     text: widget.shop['location'] as String? ?? '',
   );
+  late final _contactEmail = TextEditingController(
+    text: widget.shop['contact_email'] as String? ?? '',
+  );
+  late final _facebook = TextEditingController(
+    text: widget.shop['facebook'] as String? ?? '',
+  );
+  late final _instagram = TextEditingController(
+    text: widget.shop['instagram'] as String? ?? '',
+  );
+  late final _tiktok = TextEditingController(
+    text: widget.shop['tiktok'] as String? ?? '',
+  );
+  late final _whatsapp = TextEditingController(
+    text: widget.shop['whatsapp'] as String? ?? '',
+  );
+  late final _calls = TextEditingController(
+    text: widget.shop['calls'] as String? ?? '',
+  );
+  XFile? _logo;
+  Uint8List? _previewBytes;
+
+  String get _savedLogoUrl => (widget.shop['logo_url'] as String? ?? '').trim();
 
   @override
   void dispose() {
-    for (final controller in [_name, _owner, _phone, _location]) {
+    for (final controller in [
+      _name,
+      _owner,
+      _phone,
+      _location,
+      _contactEmail,
+      _facebook,
+      _instagram,
+      _tiktok,
+      _whatsapp,
+      _calls,
+    ]) {
       controller.dispose();
     }
     super.dispose();
   }
 
+  Future<void> _pickLogo() async {
+    final source = await showImageSourceSheet(context);
+    if (source == null || !mounted) return;
+    try {
+      final photo = await ImagePicker().pickImage(
+        source: source,
+        maxWidth: 1200,
+        imageQuality: 85,
+      );
+      if (photo == null) return;
+      final bytes = await photo.readAsBytes();
+      if (!mounted) return;
+      setState(() {
+        _logo = photo;
+        _previewBytes = bytes;
+      });
+    } on Exception {
+      if (mounted) {
+        showShopMessage(context, 'Could not open camera or gallery.');
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) => ShopPopup(
-    title: 'Edit shop information',
+    title: 'Shop information',
     icon: Icons.storefront_rounded,
     content: Column(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        const _DialogSectionLabel('SHOP LOGO'),
+        const SizedBox(height: 7),
+        _DialogLogoPicker(
+          previewBytes: _previewBytes,
+          savedLogoUrl: _savedLogoUrl,
+          onPick: _pickLogo,
+          onClear: () => setState(() {
+            _logo = null;
+            _previewBytes = null;
+          }),
+        ),
+        const SizedBox(height: 14),
+        const _DialogSectionLabel('BUSINESS'),
+        const SizedBox(height: 7),
         TextField(
           controller: _name,
           autofocus: true,
@@ -685,16 +816,192 @@ class _ShopInfoDialogState extends State<_ShopInfoDialog> {
             icon: Icons.location_on_outlined,
           ),
         ),
+        const SizedBox(height: 14),
+        const _DialogSectionLabel('CONTACT DETAILS (OPTIONAL)'),
+        const SizedBox(height: 7),
+        TextField(
+          controller: _contactEmail,
+          keyboardType: TextInputType.emailAddress,
+          autocorrect: false,
+          decoration: shopFieldDecoration(
+            'Contact email',
+            icon: Icons.email_outlined,
+          ),
+        ),
+        const SizedBox(height: 9),
+        TextField(
+          controller: _facebook,
+          decoration: shopFieldDecoration(
+            'Facebook page',
+            icon: Icons.facebook_outlined,
+          ),
+        ),
+        const SizedBox(height: 9),
+        TextField(
+          controller: _instagram,
+          decoration: shopFieldDecoration(
+            'Instagram',
+            icon: Icons.photo_camera_outlined,
+          ),
+        ),
+        const SizedBox(height: 9),
+        TextField(
+          controller: _tiktok,
+          decoration: shopFieldDecoration(
+            'TikTok',
+            icon: Icons.music_note_outlined,
+          ),
+        ),
+        const SizedBox(height: 9),
+        TextField(
+          controller: _whatsapp,
+          keyboardType: TextInputType.phone,
+          decoration: shopFieldDecoration(
+            'WhatsApp numbers',
+            icon: Icons.chat_outlined,
+          ),
+        ),
+        const SizedBox(height: 9),
+        TextField(
+          controller: _calls,
+          keyboardType: TextInputType.phone,
+          decoration: shopFieldDecoration(
+            'Call numbers',
+            icon: Icons.call_outlined,
+          ),
+        ),
       ],
     ),
     footer: ShopPopupActions(
       onCancel: () => Navigator.pop(context),
-      onConfirm: () => Navigator.pop(context, {
-        'name': _name.text.trim(),
-        'owner_name': _owner.text.trim(),
-        'phone': _phone.text.trim(),
-        'location': _location.text.trim(),
-      }),
+      onConfirm: () => Navigator.pop(
+        context,
+        _ShopInfoResult(
+          {
+            'name': _name.text.trim(),
+            'owner_name': _owner.text.trim(),
+            'phone': _phone.text.trim(),
+            'location': _location.text.trim(),
+            'contact_email': _contactEmail.text.trim(),
+            'facebook': _facebook.text.trim(),
+            'instagram': _instagram.text.trim(),
+            'tiktok': _tiktok.text.trim(),
+            'whatsapp': _whatsapp.text.trim(),
+            'calls': _calls.text.trim(),
+          },
+          _logo,
+        ),
+      ),
+    ),
+  );
+}
+
+class _ShopInfoResult {
+  const _ShopInfoResult(this.fields, this.logo);
+
+  final Map<String, String> fields;
+  final XFile? logo;
+}
+
+class _DialogSectionLabel extends StatelessWidget {
+  const _DialogSectionLabel(this.title);
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) => Text(
+    title,
+    style: const TextStyle(
+      color: ShopColors.muted,
+      fontSize: 10,
+      fontWeight: FontWeight.w800,
+      letterSpacing: .6,
+    ),
+  );
+}
+
+class _DialogLogoPicker extends StatelessWidget {
+  const _DialogLogoPicker({
+    required this.previewBytes,
+    required this.savedLogoUrl,
+    required this.onPick,
+    required this.onClear,
+  });
+
+  final Uint8List? previewBytes;
+  final String savedLogoUrl;
+  final VoidCallback onPick;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(9),
+    decoration: BoxDecoration(
+      color: ShopColors.pale,
+      borderRadius: BorderRadius.circular(13),
+    ),
+    child: Row(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: SizedBox(
+            height: 58,
+            width: 58,
+            child: previewBytes != null
+                ? Image.memory(previewBytes!, fit: BoxFit.cover)
+                : savedLogoUrl.isEmpty
+                ? const ColoredBox(
+                    color: Colors.white,
+                    child: Icon(
+                      Icons.storefront_outlined,
+                      color: ShopColors.primary,
+                      size: 27,
+                    ),
+                  )
+                : Image.network(
+                    savedLogoUrl,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, _, _) => const ColoredBox(
+                      color: Colors.white,
+                      child: Icon(
+                        Icons.storefront_outlined,
+                        color: ShopColors.primary,
+                        size: 27,
+                      ),
+                    ),
+                  ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        const Expanded(
+          child: Text(
+            'Shown on page headers and receipts.',
+            style: TextStyle(color: ShopColors.muted, fontSize: 11),
+          ),
+        ),
+        if (previewBytes != null)
+          IconButton(
+            onPressed: onClear,
+            tooltip: 'Undo logo change',
+            icon: const Icon(
+              Icons.close_rounded,
+              color: ShopColors.muted,
+              size: 18,
+            ),
+            visualDensity: VisualDensity.compact,
+          ),
+        TextButton(
+          onPressed: onPick,
+          style: TextButton.styleFrom(
+            foregroundColor: ShopColors.primary,
+            visualDensity: VisualDensity.compact,
+          ),
+          child: Text(
+            previewBytes == null ? 'Change' : 'Selected',
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+        ),
+      ],
     ),
   );
 }

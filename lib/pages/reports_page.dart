@@ -403,9 +403,16 @@ class _ReportsHeader extends StatelessWidget {
     child: Row(
       children: [
         const Expanded(
-          child: Text(
-            'Clothing Shop\nManager',
-            style: TextStyle(
+          child: ShopHeaderBrand(
+            title: 'Reports',
+            logoSize: 36,
+            nameStyle: TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: .4,
+            ),
+            titleStyle: TextStyle(
               color: Colors.white,
               fontSize: 17,
               height: 1.15,

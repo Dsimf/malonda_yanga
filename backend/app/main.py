@@ -57,6 +57,16 @@ _user_cache: dict[str, dict[str, Any]] = {}
 _shop_cache: dict[str, dict[str, Any]] = {}
 
 
+SHOP_CONTACT_FIELDS = (
+    "contact_email",
+    "facebook",
+    "instagram",
+    "tiktok",
+    "whatsapp",
+    "calls",
+)
+
+
 class ShopRegistration(BaseModel):
     shop_name: str = Field(min_length=1, max_length=160)
     owner_name: str = Field(min_length=1, max_length=160)
@@ -65,6 +75,12 @@ class ShopRegistration(BaseModel):
     phone: str = Field(default="", max_length=40)
     location: str = Field(min_length=1, max_length=160)
     business_type: str = Field(min_length=1, max_length=100)
+    contact_email: str = Field(default="", max_length=254)
+    facebook: str = Field(default="", max_length=120)
+    instagram: str = Field(default="", max_length=120)
+    tiktok: str = Field(default="", max_length=120)
+    whatsapp: str = Field(default="", max_length=120)
+    calls: str = Field(default="", max_length=120)
 
     @field_validator("email")
     @classmethod
@@ -226,6 +242,12 @@ class ShopUpdate(BaseModel):
     owner_name: str | None = Field(default=None, min_length=1, max_length=160)
     phone: str | None = Field(default=None, max_length=40)
     location: str | None = Field(default=None, min_length=1, max_length=160)
+    contact_email: str | None = Field(default=None, max_length=254)
+    facebook: str | None = Field(default=None, max_length=120)
+    instagram: str | None = Field(default=None, max_length=120)
+    tiktok: str | None = Field(default=None, max_length=120)
+    whatsapp: str | None = Field(default=None, max_length=120)
+    calls: str | None = Field(default=None, max_length=120)
 
 
 security = HTTPBearer(auto_error=False)
@@ -520,6 +542,10 @@ async def _shop_for_user(user: dict[str, Any], token: str) -> dict[str, Any]:
             "phone": metadata.get("phone") or "",
             "location": metadata["location"],
             "business_type": metadata["business_type"],
+            **{
+                field: metadata.get(field) or ""
+                for field in SHOP_CONTACT_FIELDS
+            },
         },
     )
     if not created:
@@ -735,6 +761,12 @@ async def register(data: ShopRegistration) -> dict[str, Any]:
                 "phone": data.phone,
                 "location": data.location,
                 "business_type": data.business_type,
+                "contact_email": data.contact_email,
+                "facebook": data.facebook,
+                "instagram": data.instagram,
+                "tiktok": data.tiktok,
+                "whatsapp": data.whatsapp,
+                "calls": data.calls,
                 "role": "owner",
             },
         },
@@ -1457,6 +1489,63 @@ async def update_settings(
         raise HTTPException(status_code=502, detail="Supabase did not update shop settings.")
     _shop_cache[user["id"]] = rows[0]  # keep cache in sync with the update
     return rows[0]
+
+
+@app.put("/settings/logo")
+async def upload_shop_logo(
+    data: ProductImageUpload,
+    user: dict[str, Any] = Depends(current_user),
+    token: str = Depends(_bearer_token),
+    _: None = Depends(require_owner),
+) -> dict[str, str]:
+    shop = await _owned_shop(user, token)
+    try:
+        image = base64.b64decode(data.image_base64, validate=True)
+    except (binascii.Error, ValueError) as error:
+        raise HTTPException(status_code=422, detail="The logo image is invalid.") from error
+    if len(image) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Logos must be 5 MB or smaller.")
+
+    extension = {
+        "image/jpeg": "jpg",
+        "image/png": "png",
+        "image/webp": "webp",
+    }[data.content_type]
+    object_path = f"{shop['id']}/logo.{extension}"
+    await supabase_upload(
+        f"shop-logos/{object_path}",
+        token=token,
+        content=image,
+        content_type=data.content_type,
+    )
+    config = get_settings()
+    logo_url = (
+        f"{config.supabase_url.rstrip('/')}/storage/v1/object/public/"
+        f"shop-logos/{object_path}"
+    )
+    try:
+        rows = await _table(
+            "PATCH",
+            "shops",
+            token,
+            params={"id": f"eq.{shop['id']}", "select": "*"},
+            body={"logo_url": logo_url},
+        )
+    except HTTPException as error:
+        if error.status_code == 400 and "logo_url" in str(error.detail):
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "The logo was saved to the bucket, but the shops table has "
+                    "no logo_url column. Run the latest backend/supabase/schema.sql "
+                    "migration in Supabase."
+                ),
+            ) from error
+        raise
+    if not rows:
+        raise HTTPException(status_code=404, detail="Shop not found.")
+    _shop_cache[user["id"]] = rows[0]
+    return {"logo_url": logo_url}
 
 
 EXPENSE_CATEGORIES = (

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/api_client.dart';
+import '../services/shop_profile.dart';
 import '../widgets/shop_dialogs.dart';
 import '../widgets/shop_ui.dart';
 
@@ -73,7 +74,13 @@ class _LoginPageState extends State<LoginPage> {
       _errorMessage = null;
     });
     try {
-      await ApiClient.login(email, password, rememberMe: _rememberMe);
+      final session = await ApiClient.login(
+        email,
+        password,
+        rememberMe: _rememberMe,
+      );
+      final shop = session['shop'];
+      if (shop is Map<String, dynamic>) shopProfile.apply(shop);
       if (!loginPrefsDisabledForTests) {
         await _storeCredentials(_rememberMe, email);
       }

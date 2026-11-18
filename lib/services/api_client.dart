@@ -220,6 +220,15 @@ class ApiClient {
   ) async =>
       (await _send('PATCH', '/settings', body: data)) as Map<String, dynamic>;
 
+  static Future<Map<String, dynamic>> uploadShopLogo({
+    required String contentType,
+    required String imageBase64,
+  }) async => (await _send(
+    'PUT',
+    '/settings/logo',
+    body: {'content_type': contentType, 'image_base64': imageBase64},
+  )) as Map<String, dynamic>;
+
   static Future<List<Map<String, dynamic>>> expenses({
     required DateTime start,
     required DateTime end,

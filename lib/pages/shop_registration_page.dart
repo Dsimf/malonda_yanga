@@ -1,6 +1,12 @@
-import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'dart:typed_data';
 
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+
+import '../pages/inventory_page.dart' show showImageSourceSheet;
 import '../services/api_client.dart';
+import '../services/shop_profile.dart';
 import '../widgets/shop_ui.dart';
 
 class ShopRegistrationPage extends StatefulWidget {
@@ -16,12 +22,19 @@ class _ShopRegistrationPageState extends State<ShopRegistrationPage> {
   final _ownerNameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _contactEmailController = TextEditingController();
+  final _facebookController = TextEditingController();
+  final _instagramController = TextEditingController();
+  final _tiktokController = TextEditingController();
+  final _whatsappController = TextEditingController();
+  final _callsController = TextEditingController();
   String _storeType = 'Boutique';
   String? _location;
   bool _obscurePassword = true;
   bool _termsAccepted = false;
   bool _creatingShop = false;
   String? _errorMessage;
+  XFile? _shopLogo;
 
   @override
   void dispose() {
@@ -29,6 +42,12 @@ class _ShopRegistrationPageState extends State<ShopRegistrationPage> {
     _ownerNameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _contactEmailController.dispose();
+    _facebookController.dispose();
+    _instagramController.dispose();
+    _tiktokController.dispose();
+    _whatsappController.dispose();
+    _callsController.dispose();
     super.dispose();
   }
 
@@ -224,6 +243,96 @@ class _ShopRegistrationPageState extends State<ShopRegistrationPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const _CardTitle(
+                    icon: Icons.contact_mail_outlined,
+                    title: 'Contact Details (Optional)',
+                  ),
+                  const SizedBox(height: 18),
+                  const _FieldLabel(label: 'Contact Email'),
+                  const SizedBox(height: 7),
+                  TextFormField(
+                    key: const Key('contactEmailField'),
+                    controller: _contactEmailController,
+                    keyboardType: TextInputType.emailAddress,
+                    autocorrect: false,
+                    decoration: _registrationDecoration(
+                      'Urban7.trading@gmail.com',
+                      icon: Icons.email_outlined,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  const _FieldLabel(label: 'Facebook Page'),
+                  const SizedBox(height: 7),
+                  TextFormField(
+                    key: const Key('contactFacebookField'),
+                    controller: _facebookController,
+                    decoration: _registrationDecoration(
+                      'Urban7',
+                      icon: Icons.facebook_outlined,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  const _FieldLabel(label: 'Instagram'),
+                  const SizedBox(height: 7),
+                  TextFormField(
+                    key: const Key('contactInstagramField'),
+                    controller: _instagramController,
+                    decoration: _registrationDecoration(
+                      'urban7trading',
+                      icon: Icons.photo_camera_outlined,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  const _FieldLabel(label: 'TikTok'),
+                  const SizedBox(height: 7),
+                  TextFormField(
+                    key: const Key('contactTiktokField'),
+                    controller: _tiktokController,
+                    decoration: _registrationDecoration(
+                      'urban7trading',
+                      icon: Icons.music_note_outlined,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  const _FieldLabel(label: 'WhatsApp Numbers'),
+                  const SizedBox(height: 7),
+                  TextFormField(
+                    key: const Key('contactWhatsappField'),
+                    controller: _whatsappController,
+                    keyboardType: TextInputType.phone,
+                    decoration: _registrationDecoration(
+                      '0961667079 / 0979409750',
+                      icon: Icons.chat_outlined,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  const _FieldLabel(label: 'Call Numbers'),
+                  const SizedBox(height: 7),
+                  TextFormField(
+                    key: const Key('contactCallsField'),
+                    controller: _callsController,
+                    keyboardType: TextInputType.phone,
+                    decoration: _registrationDecoration(
+                      '0961667079 / 0979409750',
+                      icon: Icons.call_outlined,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  const _FieldLabel(label: 'Company Logo (Optional)'),
+                  const SizedBox(height: 8),
+                  _ShopLogoPicker(
+                    logo: _shopLogo,
+                    onTap: _pickShopLogo,
+                    onClear: () => setState(() => _shopLogo = null),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            _FormCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const _CardTitle(
                     icon: Icons.account_circle_outlined,
                     title: 'Owner Account & Currency',
                   ),
@@ -383,6 +492,23 @@ class _ShopRegistrationPageState extends State<ShopRegistrationPage> {
   String? _required(String? value) =>
       value == null || value.trim().isEmpty ? 'This field is required' : null;
 
+  Future<void> _pickShopLogo() async {
+    final source = await showImageSourceSheet(context);
+    if (source == null || !mounted) return;
+    try {
+      final photo = await ImagePicker().pickImage(
+        source: source,
+        maxWidth: 1600,
+        imageQuality: 82,
+      );
+      if (photo != null && mounted) setState(() => _shopLogo = photo);
+    } on Exception {
+      if (mounted) {
+        showShopMessage(context, 'Could not open camera or gallery.');
+      }
+    }
+  }
+
   Future<void> _createShop() async {
     if (!_termsAccepted) {
       showShopMessage(context, 'Please accept the terms to continue.');
@@ -401,6 +527,12 @@ class _ShopRegistrationPageState extends State<ShopRegistrationPage> {
         'password': _passwordController.text,
         'location': _location!,
         'business_type': _storeType,
+        'contact_email': _contactEmailController.text.trim(),
+        'facebook': _facebookController.text.trim(),
+        'instagram': _instagramController.text.trim(),
+        'tiktok': _tiktokController.text.trim(),
+        'whatsapp': _whatsappController.text.trim(),
+        'calls': _callsController.text.trim(),
       });
       if (!mounted) return;
       if (result['requires_email_confirmation'] == true) {
@@ -411,6 +543,24 @@ class _ShopRegistrationPageState extends State<ShopRegistrationPage> {
         Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
         return;
       }
+      final shop = result['shop'];
+      if (shop is Map<String, dynamic>) shopProfile.apply(shop);
+      if (_shopLogo != null) {
+        try {
+          final uploaded = await ApiClient.uploadShopLogo(
+            contentType: _shopLogo!.mimeType ?? 'image/jpeg',
+            imageBase64: base64Encode(await _shopLogo!.readAsBytes()),
+          );
+          final logoUrl = uploaded['logo_url'] as String?;
+          final current = shopProfile.shop;
+          if (logoUrl != null && current != null) {
+            shopProfile.apply({...current, 'logo_url': logoUrl});
+          }
+        } on ApiException {
+          // Logo upload is optional — don't block the rest of the flow.
+        }
+      }
+      if (!mounted) return;
       Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
     } on ApiException catch (error) {
       if (mounted) {
@@ -801,6 +951,109 @@ class _TermsAgreement extends StatelessWidget {
         ),
       ),
     ],
+  );
+}
+
+class _ShopLogoPicker extends StatelessWidget {
+  const _ShopLogoPicker({
+    required this.logo,
+    required this.onTap,
+    required this.onClear,
+  });
+
+  final XFile? logo;
+  final VoidCallback onTap;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(10),
+    decoration: BoxDecoration(
+      color: ShopColors.pale,
+      borderRadius: BorderRadius.circular(11),
+    ),
+    child: Row(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: SizedBox(
+            height: 64,
+            width: 64,
+            child: logo == null
+                ? const ColoredBox(
+                    color: Colors.white,
+                    child: Icon(
+                      Icons.storefront_outlined,
+                      color: ShopColors.primary,
+                      size: 30,
+                    ),
+                  )
+                : FutureBuilder<Uint8List>(
+                    future: logo!.readAsBytes(),
+                    builder: (context, snapshot) {
+                      final bytes = snapshot.data;
+                      if (bytes == null) {
+                        return const ColoredBox(
+                          color: Colors.white,
+                          child: Center(
+                            child: SizedBox(
+                              height: 18,
+                              width: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
+                        );
+                      }
+                      return Image.memory(bytes, fit: BoxFit.cover);
+                    },
+                  ),
+          ),
+        ),
+        const SizedBox(width: 11),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                logo == null ? 'Upload a company logo' : 'Logo selected',
+                style: const TextStyle(
+                  color: ShopColors.text,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 2),
+              const Text(
+                'PNG or JPG, shown on headers and receipts.',
+                style: TextStyle(color: ShopColors.muted, fontSize: 11),
+              ),
+            ],
+          ),
+        ),
+        if (logo != null)
+          IconButton(
+            onPressed: onClear,
+            tooltip: 'Remove logo',
+            icon: const Icon(
+              Icons.close_rounded,
+              color: ShopColors.muted,
+              size: 19,
+            ),
+            visualDensity: VisualDensity.compact,
+          ),
+        TextButton(
+          onPressed: onTap,
+          style: TextButton.styleFrom(
+            foregroundColor: ShopColors.primary,
+            visualDensity: VisualDensity.compact,
+          ),
+          child: Text(
+            logo == null ? 'Choose' : 'Change',
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+        ),
+      ],
+    ),
   );
 }
 

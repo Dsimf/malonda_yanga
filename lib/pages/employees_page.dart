@@ -262,9 +262,16 @@ class _EmployeesHeader extends StatelessWidget {
         ),
         const SizedBox(width: 6),
         const Expanded(
-          child: Text(
-            'Staff & Access',
-            style: TextStyle(
+          child: ShopHeaderBrand(
+            title: 'Staff & Access',
+            logoSize: 34,
+            nameStyle: TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: .4,
+            ),
+            titleStyle: TextStyle(
               color: Colors.white,
               fontSize: 17,
               fontWeight: FontWeight.w800,

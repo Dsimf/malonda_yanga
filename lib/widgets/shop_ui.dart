@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../services/shop_profile.dart';
+
 abstract final class ShopColors {
   static const primary = Color(0xFF002E7B);
   static const primaryContainer = Color(0xFF1244A2);
@@ -90,6 +92,137 @@ Widget brandTitle({bool compact = false}) => Row(
     ),
   ],
 );
+
+/// Company name entered at registration (falls back to the Urban7 brand
+/// until the shop profile loads).
+class ShopCompanyName extends StatelessWidget {
+  const ShopCompanyName({
+    super.key,
+    required this.style,
+    this.maxLines = 1,
+    this.textAlign,
+    this.overflow = TextOverflow.ellipsis,
+  });
+
+  final TextStyle style;
+  final int maxLines;
+  final TextAlign? textAlign;
+  final TextOverflow overflow;
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: shopProfile,
+    builder: (context, _) {
+      shopProfile.ensureLoaded();
+      return Text(
+        shopProfile.companyName,
+        maxLines: maxLines,
+        overflow: overflow,
+        textAlign: textAlign,
+        style: style,
+      );
+    },
+  );
+}
+
+/// Shop logo from the shop profile, with the clothing icon as a fallback
+/// when no logo was uploaded (or it cannot be fetched).
+class ShopBrandLogo extends StatelessWidget {
+  const ShopBrandLogo({
+    super.key,
+    this.size = 40,
+    this.backgroundColor = Colors.white,
+    this.iconColor = ShopColors.primary,
+    this.borderRadius = 8,
+    this.icon = Icons.checkroom_outlined,
+    this.logoUrl,
+  });
+
+  final double size;
+  final Color backgroundColor;
+  final Color iconColor;
+  final double borderRadius;
+  final IconData icon;
+  final String? logoUrl;
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: shopProfile,
+    builder: (context, _) {
+      shopProfile.ensureLoaded();
+      final url = (logoUrl ?? shopProfile.logoUrl).trim();
+      final fallback = Icon(icon, color: iconColor, size: size * .62);
+      return Container(
+        width: size,
+        height: size,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: backgroundColor,
+          borderRadius: BorderRadius.circular(borderRadius),
+        ),
+        child: url.isEmpty
+            ? Center(child: fallback)
+            : Image.network(
+                url,
+                fit: BoxFit.contain,
+                errorBuilder: (_, _, _) => Center(child: fallback),
+              ),
+      );
+    },
+  );
+}
+
+/// Small logo + company name cluster used by page headers.
+class ShopHeaderBrand extends StatelessWidget {
+  const ShopHeaderBrand({
+    super.key,
+    required this.title,
+    this.logoSize = 34,
+    this.nameStyle = const TextStyle(
+      color: Colors.white,
+      fontSize: 11,
+      fontWeight: FontWeight.w800,
+      letterSpacing: .5,
+    ),
+    this.titleStyle = const TextStyle(
+      color: Colors.white,
+      fontSize: 17,
+      height: 1.1,
+      fontWeight: FontWeight.w800,
+    ),
+    this.iconColor = ShopColors.primary,
+  });
+
+  final String title;
+  final double logoSize;
+  final TextStyle nameStyle;
+  final TextStyle titleStyle;
+  final Color iconColor;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      ShopBrandLogo(size: logoSize, iconColor: iconColor),
+      const SizedBox(width: 9),
+      Expanded(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ShopCompanyName(style: nameStyle),
+            Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: titleStyle,
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
+}
+
 
 Widget pageHeader(
   String title, {

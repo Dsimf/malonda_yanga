@@ -326,54 +326,29 @@ class _UrgentStockAlertsState extends State<_UrgentStockAlerts> {
 class _HomeAppBar extends StatelessWidget {
   const _HomeAppBar();
 
-  static const _headerBlue = Color(0xFF194AA2);
-
   @override
   Widget build(BuildContext context) => Container(
     height: 72,
     padding: const EdgeInsets.symmetric(horizontal: 15),
-    color: _headerBlue,
+    color: const Color(0xFF194AA2),
     child: Row(
       children: [
-        Container(
-          height: 42,
-          width: 42,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(2),
-          ),
-          child: const Icon(
-            Icons.checkroom_outlined,
-            color: _headerBlue,
-            size: 26,
-          ),
-        ),
-        const SizedBox(width: 9),
         const Expanded(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'SHOP MANAGER',
-                maxLines: 1,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: .5,
-                ),
-              ),
-              Text(
-                'Home',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 19,
-                  height: 1.1,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
+          child: ShopHeaderBrand(
+            title: 'Home',
+            logoSize: 42,
+            nameStyle: TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              letterSpacing: .5,
+            ),
+            titleStyle: TextStyle(
+              color: Colors.white,
+              fontSize: 19,
+              height: 1.1,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ),
         _HomeAppBarAction(

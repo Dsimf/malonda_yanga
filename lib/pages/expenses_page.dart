@@ -634,9 +634,16 @@ class _ExpensesHeader extends StatelessWidget {
         ),
         const SizedBox(width: 6),
         const Expanded(
-          child: Text(
-            'Operating Expenses',
-            style: TextStyle(
+          child: ShopHeaderBrand(
+            title: 'Operating Expenses',
+            logoSize: 34,
+            nameStyle: TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: .4,
+            ),
+            titleStyle: TextStyle(
               color: Colors.white,
               fontSize: 17,
               fontWeight: FontWeight.w800,

@@ -446,37 +446,22 @@ class _InventoryAppBar extends StatelessWidget {
     color: _blue,
     child: Row(
       children: [
-        Container(
-          height: 34,
-          width: 34,
-          color: Colors.white,
-          child: const Icon(Icons.checkroom_outlined, color: _blue, size: 22),
-        ),
-        const SizedBox(width: 8),
         const Expanded(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'SHOP MANAGER',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: .5,
-                ),
-              ),
-              Text(
-                'Inventory',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  height: 1.1,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
+          child: ShopHeaderBrand(
+            title: 'Inventory',
+            logoSize: 34,
+            nameStyle: TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: .5,
+            ),
+            titleStyle: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              height: 1.1,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ),
         _InventoryAppBarAction(icon: Icons.search_rounded, onPressed: onSearch),

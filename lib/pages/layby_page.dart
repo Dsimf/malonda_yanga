@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../services/api_client.dart';
+import '../services/shop_profile.dart';
+import '../services/urban7_branding.dart';
 import '../widgets/shop_dialogs.dart';
 import '../widgets/shop_ui.dart';
 
@@ -121,6 +123,22 @@ class _LaybyPageState extends State<LaybyPage>
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Row(
+              children: [
+                const ShopBrandLogo(size: 34),
+                const SizedBox(width: 9),
+                const Expanded(
+                  child: ShopCompanyName(
+                    style: TextStyle(
+                      color: ShopColors.text,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
             Text(customer, style: const TextStyle(fontWeight: FontWeight.w800)),
             const SizedBox(height: 10),
             _receiptRow('Sale total', 'K$total'),
@@ -159,6 +177,17 @@ class _LaybyPageState extends State<LaybyPage>
                   fontWeight: FontWeight.w700,
                 ),
               ),
+            const SizedBox(height: 12),
+            Text(
+              shopProfile.shop == null
+                  ? Urban7.contactBlock
+                  : ShopProfile.contactBlockFor(shopProfile.shop!),
+              style: const TextStyle(
+                color: ShopColors.muted,
+                fontSize: 10,
+                height: 1.4,
+              ),
+            ),
           ],
         ),
         footer: ShopPopupSingleAction(
@@ -195,7 +224,36 @@ class _LaybyPageState extends State<LaybyPage>
     appBar: AppBar(
       backgroundColor: ShopColors.primary,
       foregroundColor: Colors.white,
-      title: const Text('Layby Sales'),
+      title: const Row(
+        children: [
+          ShopBrandLogo(size: 30),
+          SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ShopCompanyName(
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: .3,
+                  ),
+                ),
+                Text(
+                  'Layby Sales',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
       bottom: TabBar(
         controller: _tabs,
         indicatorColor: Colors.white,

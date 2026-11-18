@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -11,6 +12,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/api_client.dart';
+import '../services/shop_profile.dart';
 import '../services/urban7_branding.dart';
 import '../widgets/shop_ui.dart';
 
@@ -42,6 +44,7 @@ class _SaleSuccessPageState extends State<SaleSuccessPage> {
 
   String _receiptText({
     required String shopName,
+    required String contactBlock,
     required List<_ReceiptLine> items,
     required double subtotal,
     required double discount,
@@ -56,12 +59,12 @@ class _SaleSuccessPageState extends State<SaleSuccessPage> {
               '${item.name} (${item.size}, ${item.color}) x${item.quantity} - K${item.unitPrice * item.quantity}',
         )
         .join('\n');
-    return '$shopName\n${Urban7.companyName}\nSales receipt\n'
+    return '${shopName.trim().isEmpty ? '' : '$shopName\n'}Sales receipt\n'
         '${customerName.isEmpty ? '' : 'Customer: $customerName\n'}\n'
         '$itemLines\n\n'
         'Subtotal: K${subtotal.toStringAsFixed(2)}\nDiscount: K${discount.toStringAsFixed(2)}\nTotal: K${total.toStringAsFixed(2)}\n'
         'Payment: $paymentMethod ($saleType sale)\n\n'
-        '${Urban7.returnPolicy}\n\n${Urban7.contactBlock}';
+        '${Urban7.returnPolicy}\n\n$contactBlock';
   }
 
   Future<String> _receiptMessage({
@@ -75,7 +78,8 @@ class _SaleSuccessPageState extends State<SaleSuccessPage> {
   }) async {
     final shop = await _shop;
     return _receiptText(
-      shopName: shop['name'] as String? ?? 'Shop',
+      shopName: (shop['name'] as String?) ?? '',
+      contactBlock: ShopProfile.contactBlockFor(shop),
       items: items,
       subtotal: subtotal,
       discount: discount,
@@ -88,25 +92,47 @@ class _SaleSuccessPageState extends State<SaleSuccessPage> {
 
   Future<Uint8List> _receiptPdf({
     required String shopName,
+    required String contactBlock,
     required List<_ReceiptLine> items,
     required double subtotal,
     required double discount,
     required double total,
     required String paymentMethod,
+    String logoUrl = '',
     String saleType = 'Walk-in',
     String customerName = '',
   }) async {
+    pw.ImageProvider? logo;
+    if (logoUrl.trim().isNotEmpty) {
+      try {
+        final response = await http
+            .get(Uri.parse(logoUrl))
+            .timeout(const Duration(seconds: 5));
+        if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
+          logo = pw.MemoryImage(response.bodyBytes);
+        }
+      } on Exception {
+        // A missing logo must never block printing the receipt.
+      }
+    }
     final document = pw.Document();
     document.addPage(
       pw.Page(
         build: (context) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
-            pw.Text(
-              shopName,
-              style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
-            ),
-            pw.Text(Urban7.companyName),
+            if (logo != null) ...[
+              pw.Center(child: pw.Image(logo, height: 48)),
+              pw.SizedBox(height: 6),
+            ],
+            if (shopName.trim().isNotEmpty)
+              pw.Text(
+                shopName,
+                style: pw.TextStyle(
+                  fontSize: 20,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
             if (customerName.isNotEmpty) pw.Text('Customer: $customerName'),
             pw.SizedBox(height: 8),
             pw.Text('$saleType sale receipt'),
@@ -129,7 +155,7 @@ class _SaleSuccessPageState extends State<SaleSuccessPage> {
             pw.SizedBox(height: 10),
             pw.Text(Urban7.returnPolicy),
             pw.SizedBox(height: 6),
-            pw.Text(Urban7.contactBlock),
+            pw.Text(contactBlock),
           ],
         ),
       ),
@@ -244,10 +270,12 @@ class _SaleSuccessPageState extends State<SaleSuccessPage> {
     if (file == null) return;
     try {
       final shop = await _shop;
-      final shopName = shop['name'] as String? ?? 'Shop';
+      final shopName = (shop['name'] as String?) ?? '';
       await SharePlus.instance.share(
         ShareParams(
-          subject: '$shopName sales receipt',
+          subject: shopName.trim().isEmpty
+              ? 'Sales receipt'
+              : '$shopName sales receipt',
           text: 'Here is your receipt. Thank you for shopping with us!',
           files: [XFile(file.path, mimeType: 'image/png')],
           fileNameOverrides: const ['sales-receipt.png'],
@@ -276,7 +304,9 @@ class _SaleSuccessPageState extends State<SaleSuccessPage> {
     try {
       final shop = await _shop;
       final bytes = await _receiptPdf(
-        shopName: shop['name'] as String? ?? 'Shop',
+        shopName: (shop['name'] as String?) ?? '',
+        contactBlock: ShopProfile.contactBlockFor(shop),
+        logoUrl: shop['logo_url'] as String? ?? '',
         items: items,
         subtotal: subtotal,
         discount: discount,
@@ -394,7 +424,9 @@ class _SaleSuccessPageState extends State<SaleSuccessPage> {
                       return RepaintBoundary(
                         key: _receiptKey,
                         child: _DigitalReceipt(
-                        shopName: shop['name'] as String? ?? 'Shop',
+                        shopName: (shop['name'] as String?) ?? '',
+                        contactBlock: ShopProfile.contactBlockFor(shop),
+                        logoUrl: shop['logo_url'] as String? ?? '',
                         location: shop['location'] as String? ?? '',
                         phone: shop['phone'] as String? ?? '',
                         items: items,
@@ -642,25 +674,30 @@ class _ReceiptAppBar extends StatelessWidget {
           visualDensity: VisualDensity.compact,
         ),
         const SizedBox(width: 4),
-        Container(
-          height: 32,
-          width: 32,
-          color: Colors.white,
-          child: const Icon(
-            Icons.checkroom_outlined,
-            color: ShopColors.primary,
-            size: 21,
-          ),
-        ),
+        const ShopBrandLogo(size: 32),
         const SizedBox(width: 8),
         const Expanded(
-          child: Text(
-            'Product Details',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.w800,
-            ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ShopCompanyName(
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: .3,
+                ),
+              ),
+              Text(
+                'Sales Receipt',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
           ),
         ),
         IconButton(
@@ -852,6 +889,8 @@ class _PaymentSummary extends StatelessWidget {
 class _DigitalReceipt extends StatelessWidget {
   const _DigitalReceipt({
     required this.shopName,
+    required this.contactBlock,
+    required this.logoUrl,
     required this.location,
     required this.phone,
     required this.items,
@@ -864,6 +903,8 @@ class _DigitalReceipt extends StatelessWidget {
   });
 
   final String shopName;
+  final String contactBlock;
+  final String logoUrl;
   final String location;
   final String phone;
   final List<_ReceiptLine> items;
@@ -888,37 +929,43 @@ class _DigitalReceipt extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 22, 16, 15),
         child: Column(
           children: [
-            const Icon(
-              Icons.checkroom_outlined,
-              color: ShopColors.primary,
-              size: 23,
+            SizedBox(
+              height: 42,
+              width: 42,
+              child: logoUrl.trim().isEmpty
+                  ? Image.asset(
+                      Urban7.logoAsset,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, _, _) => const Icon(
+                        Icons.checkroom_outlined,
+                        color: ShopColors.primary,
+                        size: 26,
+                      ),
+                    )
+                  : Image.network(
+                      logoUrl,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, _, _) => Image.asset(
+                        Urban7.logoAsset,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, _, _) => const Icon(
+                          Icons.checkroom_outlined,
+                          color: ShopColors.primary,
+                          size: 26,
+                        ),
+                      ),
+                    ),
             ),
             const SizedBox(height: 5),
-            SizedBox(
-              height: 34,
-              width: 34,
-              child: Image.asset(
-                Urban7.logoAsset,
-                fit: BoxFit.contain,
-                errorBuilder: (_, _, _) => const SizedBox.shrink(),
+            if (shopName.trim().isNotEmpty)
+              Text(
+                shopName,
+                style: TextStyle(
+                  color: ShopColors.text,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
-            ),
-            Text(
-              shopName,
-              style: TextStyle(
-                color: ShopColors.text,
-                fontSize: 14,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            Text(
-              Urban7.companyName,
-              style: const TextStyle(
-                color: ShopColors.muted,
-                fontSize: 9,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
             if (customerName.trim().isNotEmpty) ...[
               const SizedBox(height: 5),
               Text(
@@ -1031,7 +1078,9 @@ class _DigitalReceipt extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Thank you for shopping with ${shopName.trim().isEmpty ? Urban7.companyName : shopName}!\n${Urban7.contactBlock}',
+              shopName.trim().isEmpty
+                  ? 'Thank you for shopping with us!\n$contactBlock'
+                  : 'Thank you for shopping with ${shopName.trim()}!\n$contactBlock',
               textAlign: TextAlign.center,
               style: const TextStyle(
                 color: ShopColors.muted,

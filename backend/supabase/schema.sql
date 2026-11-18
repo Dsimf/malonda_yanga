@@ -13,6 +13,19 @@ create table if not exists public.shops (
 
 alter table public.shops alter column phone set default '';
 
+-- Optional shop contact channels shown on receipts and in Shop Information.
+alter table public.shops
+  add column if not exists contact_email text not null default '',
+  add column if not exists facebook text not null default '',
+  add column if not exists instagram text not null default '',
+  add column if not exists tiktok text not null default '',
+  add column if not exists whatsapp text not null default '',
+  add column if not exists calls text not null default '';
+
+-- Optional shop logo (public URL in the shop-logos bucket).
+alter table public.shops
+  add column if not exists logo_url text not null default '';
+
 -- One row per payment recorded against a layby sale. Kept even after the
 -- layby settles so the full payment history is always retrievable.
 create table if not exists public.layby_payments (
@@ -270,6 +283,48 @@ create policy "Shop owners manage their suppliers" on public.suppliers
 insert into storage.buckets (id, name, public)
 values ('product-images', 'product-images', true)
 on conflict (id) do update set public = true;
+
+insert into storage.buckets (id, name, public)
+values ('shop-logos', 'shop-logos', true)
+on conflict (id) do update set public = true;
+
+drop policy if exists "Shop owners read shop logos" on storage.objects;
+create policy "Shop owners read shop logos" on storage.objects
+  for select to authenticated using (
+    bucket_id = 'shop-logos'
+    and exists (
+      select 1 from public.shops
+      where shops.id::text = split_part(name, '/', 1)
+        and shops.owner_id = auth.uid()
+    )
+  );
+drop policy if exists "Shop owners upload shop logos" on storage.objects;
+create policy "Shop owners upload shop logos" on storage.objects
+  for insert to authenticated with check (
+    bucket_id = 'shop-logos'
+    and exists (
+      select 1 from public.shops
+      where shops.id::text = split_part(name, '/', 1)
+        and shops.owner_id = auth.uid()
+    )
+  );
+drop policy if exists "Shop owners update shop logos" on storage.objects;
+create policy "Shop owners update shop logos" on storage.objects
+  for update to authenticated using (
+    bucket_id = 'shop-logos'
+    and exists (
+      select 1 from public.shops
+      where shops.id::text = split_part(name, '/', 1)
+        and shops.owner_id = auth.uid()
+    )
+  ) with check (
+    bucket_id = 'shop-logos'
+    and exists (
+      select 1 from public.shops
+      where shops.id::text = split_part(name, '/', 1)
+        and shops.owner_id = auth.uid()
+    )
+  );
 
 -- ---------------- Expense policies (owner-only via the shops owner link) ----
 drop policy if exists "Shop owners manage expenses" on public.expenses;

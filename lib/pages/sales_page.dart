@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/api_client.dart';
+import '../services/shop_profile.dart';
 import '../services/urban7_branding.dart';
 import '../widgets/barcode_scanner.dart';
 import '../widgets/shop_dialogs.dart';
@@ -586,41 +587,22 @@ class _SalesAppBar extends StatelessWidget {
     color: _blue,
     child: Row(
       children: [
-        Container(
-          height: 42,
-          width: 42,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(2),
-          ),
-          child: const Icon(Icons.checkroom_outlined, color: _blue, size: 26),
-        ),
-        const SizedBox(width: 9),
         const Expanded(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'SHOP MANAGER',
-                maxLines: 1,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: .5,
-                ),
-              ),
-              Text(
-                'Sales',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 19,
-                  height: 1.1,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
+          child: ShopHeaderBrand(
+            title: 'Sales',
+            logoSize: 42,
+            nameStyle: TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              letterSpacing: .5,
+            ),
+            titleStyle: TextStyle(
+              color: Colors.white,
+              fontSize: 19,
+              height: 1.1,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ),
         _AppBarAction(icon: Icons.search_rounded, onPressed: onSearch),
@@ -634,6 +616,7 @@ class _SalesAppBar extends StatelessWidget {
               if (ApiClient.isEmployee) {
                 try {
                   await ApiClient.logout();
+                  shopProfile.clear();
                 } on ApiException catch (error) {
                   if (context.mounted) {
                     showShopMessage(context, error.message);
