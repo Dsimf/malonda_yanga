@@ -26,11 +26,6 @@ class _ExpensesPageState extends State<ExpensesPage> {
 
   static const _periodLabels = ['Today', 'This Week', 'This Month', 'All Time'];
 
-  DateTime get _monthStart {
-    final now = DateTime.now();
-    return DateTime(now.year, now.month);
-  }
-
   DateTime get _periodStart {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -49,7 +44,7 @@ class _ExpensesPageState extends State<ExpensesPage> {
     });
     try {
       final expenses = await ApiClient.expenses(
-        start: _monthStart,
+        start: _periodIndex == 3 ? DateTime(2000) : _periodStart,
         end: DateTime.now(),
       );
       if (mounted) {
@@ -106,7 +101,7 @@ class _ExpensesPageState extends State<ExpensesPage> {
   }
 
   DateTime? _expenseDate(Map<String, dynamic> expense) {
-    final raw = expense['expense_date'] ?? expense['created_at'];
+    final raw = expense['spent_on'] ?? expense['expense_date'] ?? expense['created_at'];
     if (raw is! String) return null;
     return DateTime.tryParse(raw);
   }
@@ -339,7 +334,10 @@ class _ExpensesPageState extends State<ExpensesPage> {
                           return Expanded(
                             child: GestureDetector(
                               key: Key('opexPeriod${_periodLabels[index]}'),
-                              onTap: () => setState(() => _periodIndex = index),
+                              onTap: () {
+                             setState(() => _periodIndex = index);
+                             _load();
+                           },
                               child: Container(
                                 margin: EdgeInsets.only(
                                   right: index == _periodLabels.length - 1
@@ -645,7 +643,7 @@ class _ExpenseDialogState extends State<_ExpenseDialog> {
       mainAxisSize: MainAxisSize.min,
       children: [
         DropdownButtonFormField<String>(
-          value: _expenseCategory,
+          initialValue: _expenseCategory,
           isExpanded: true,
           items: _expenseCategories
               .map(
