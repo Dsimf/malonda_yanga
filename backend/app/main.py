@@ -380,24 +380,65 @@ async def supabase_request(
         ) from error
 
 
+async def _ensure_public_bucket(bucket: str) -> None:
+    """Creates the storage bucket (or makes it public) with the service role.
+
+    Logos must stay readable from receipts/headers, and this keeps the
+    feature working even when the SQL migration has not been applied yet.
+    """
+    try:
+        await supabase_request(
+            "PUT",
+            f"/storage/v1/bucket/{bucket}",
+            admin=True,
+            body={"public": True},
+        )
+    except HTTPException:
+        try:
+            await supabase_request(
+                "POST",
+                "/storage/v1/bucket",
+                admin=True,
+                body={"id": bucket, "name": bucket, "public": True},
+            )
+        except HTTPException as error:
+            # Another request may have created it between the PUT and POST.
+            if error.status_code not in (400, 409):
+                raise
+
+
 async def supabase_upload(
     path: str,
     *,
     token: str,
     content: bytes,
     content_type: str,
+    admin: bool = False,
 ) -> None:
     url, key = _configuration()
+    if admin:
+        # The service role bypasses storage.objects RLS, so uploads that
+        # depend on newly-added bucket policies work even before the
+        # migration has been applied to the live project.
+        service_key = _service_role_key()
+        headers = {
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}",
+            "Content-Type": content_type,
+            "x-upsert": "true",
+        }
+    else:
+        headers = {
+            "apikey": key,
+            "Authorization": f"Bearer {token}",
+            "Content-Type": content_type,
+            "x-upsert": "true",
+        }
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(
                 f"{url}/storage/v1/object/{path.lstrip('/')}",
-                headers={
-                    "apikey": key,
-                    "Authorization": f"Bearer {token}",
-                    "Content-Type": content_type,
-                    "x-upsert": "true",
-                },
+                headers=headers,
                 content=content,
             )
     except httpx.TimeoutException as error:
@@ -1512,27 +1553,52 @@ async def upload_shop_logo(
         "image/webp": "webp",
     }[data.content_type]
     object_path = f"{shop['id']}/logo.{extension}"
-    await supabase_upload(
-        f"shop-logos/{object_path}",
-        token=token,
-        content=image,
-        content_type=data.content_type,
-    )
+    object_key = f"shop-logos/{object_path}"
+    try:
+        await _ensure_public_bucket("shop-logos")
+        await supabase_upload(
+            object_key,
+            token=token,
+            content=image,
+            content_type=data.content_type,
+            admin=True,
+        )
+    except HTTPException as error:
+        # No service role key configured: fall back to the owner's token and
+        # rely on the shop-logos storage policies from schema.sql.
+        if error.status_code == 503:
+            await supabase_upload(
+                object_key,
+                token=token,
+                content=image,
+                content_type=data.content_type,
+            )
+        else:
+            raise
     config = get_settings()
     logo_url = (
         f"{config.supabase_url.rstrip('/')}/storage/v1/object/public/"
         f"shop-logos/{object_path}"
     )
     try:
-        rows = await _table(
+        rows = await supabase_request(
             "PATCH",
-            "shops",
-            token,
+            "/rest/v1/shops",
+            token=token,
+            admin=True,
             params={"id": f"eq.{shop['id']}", "select": "*"},
             body={"logo_url": logo_url},
         )
     except HTTPException as error:
-        if error.status_code == 400 and "logo_url" in str(error.detail):
+        if error.status_code == 503:
+            rows = await _table(
+                "PATCH",
+                "shops",
+                token,
+                params={"id": f"eq.{shop['id']}", "select": "*"},
+                body={"logo_url": logo_url},
+            )
+        elif error.status_code == 400 and "logo_url" in str(error.detail):
             raise HTTPException(
                 status_code=500,
                 detail=(
