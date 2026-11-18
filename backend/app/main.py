@@ -30,6 +30,7 @@ class _JsonEncoder(json.JSONEncoder):
 class Settings(BaseSettings):
     supabase_url: str = "https://ceqxnujtapdkhomhiiby.supabase.co"
     supabase_anon_key: str = "sb_publishable_ze1rjVQKXci6LgelzDG1oA_ydGUBSF1"
+    supabase_service_role_key: str = ""
     cors_origins: str = "http://localhost:3000,http://localhost:8080"
     auth_redirect_url: str = "http://192.168.8.101:8000/auth/confirmed"
     auth_recovery_redirect_url: str = "http://192.168.8.101:8000/auth/recovery"
@@ -255,6 +256,26 @@ def _configuration() -> tuple[str, str]:
     return url, key
 
 
+def _service_role_key() -> str:
+    """Returns the Supabase service role key required for admin auth endpoints.
+
+    /auth/v1/admin/* endpoints (create/delete admin users) require the
+    service_role key, not the anon key and not a user's access token. The anon
+    key is intentionally rejected here because it cannot administer auth users.
+    """
+    config = get_settings()
+    key = config.supabase_service_role_key.strip()
+    if not key or not key.startswith("sb_secret_"):
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Configure SUPABASE_SERVICE_ROLE_KEY with the Supabase service "
+                "role key (sb_secret_...) to create employee logins."
+            ),
+        )
+    return key
+
+
 async def supabase_request(
     method: str,
     path: str,
@@ -262,12 +283,21 @@ async def supabase_request(
     token: str | None = None,
     params: dict[str, str] | None = None,
     body: Any = None,
+    admin: bool = False,
 ) -> Any:
     url, key = _configuration()
     headers = {
         "apikey": key,
         "Authorization": f"Bearer {token or key}",
     }
+    # Admin auth endpoints (/auth/v1/admin/*) require the service role key,
+    # not the anon key and not the signed-in user's access token.
+    if admin:
+        service_key = _service_role_key()
+        headers = {
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}",
+        }
     if method in {"POST", "PATCH", "DELETE"}:
         headers["Prefer"] = "return=representation"
 
@@ -1526,7 +1556,7 @@ async def create_employee(
     payload = await supabase_request(
         "POST",
         "/auth/v1/admin/users",
-        token=token,
+        admin=True,
         body={
             "email": data.email,
             "password": data.password,
@@ -1583,7 +1613,7 @@ async def delete_employee(
         await supabase_request(
             "DELETE",
             f"/auth/v1/admin/users/{rows[0]['user_id']}",
-            token=token,
+            admin=True,
         )
     except HTTPException:
         pass  # keep the row removal authoritative even if auth cleanup fails
