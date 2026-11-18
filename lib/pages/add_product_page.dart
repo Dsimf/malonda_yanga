@@ -476,6 +476,7 @@ class _AddProductPageState extends State<AddProductPage> {
                     }
                     await _rememberCategory(typed);
                     if (!mounted) return;
+                    if (!context.mounted) return;
                     showShopMessage(context, 'Category "$typed" saved.');
                   },
                   onManageCategories: _manageCategories,
