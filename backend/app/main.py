@@ -524,6 +524,24 @@ async def _shop_for_user(user: dict[str, Any], token: str) -> dict[str, Any]:
     )
     if not created:
         raise HTTPException(status_code=502, detail="Supabase did not create the shop.")
+    # Record the owner as a shop member so role resolution always finds them.
+    # Use the service role so this works even if RLS policies are not yet applied.
+    try:
+        await supabase_request(
+            "POST",
+            "/rest/v1/shop_users",
+            admin=True,
+            body={
+                "shop_id": created[0]["id"],
+                "user_id": user["id"],
+                "role": "owner",
+                "display_name": metadata["owner_name"],
+            },
+        )
+    except HTTPException:
+        # Row may already exist (backfill/migration); role resolution falls back
+        # to the shop-ownership lookup below.
+        pass
     return created[0]
 
 
@@ -573,10 +591,11 @@ async def _user_role(user: dict[str, Any], token: str) -> str | None:
         print(f"[DEBUG] _user_role: found shop_users row for user {user['id']}, role={role}")
         return role
     # Fallback: if the user owns a shop, they're an owner.
+    # Use the service role so this lookup is not blocked by missing RLS policies.
     owned = await supabase_request(
         "GET",
         "/rest/v1/shops",
-        token=token,
+        admin=True,
         params={
             "select": "id",
             "owner_id": f"eq.{user['id']}",

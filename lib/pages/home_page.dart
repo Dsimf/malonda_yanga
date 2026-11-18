@@ -818,7 +818,7 @@ class _HomeBottomNavigation extends StatelessWidget {
       ]);
       routes.add(_HomeNavInfo(icon: Icons.settings_outlined, label: 'Settings', route: '/settings'));
     }
-    final selectedRoute = '/home';
+    final selectedRoute = role == 'employee' ? '/sales' : '/home';
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,

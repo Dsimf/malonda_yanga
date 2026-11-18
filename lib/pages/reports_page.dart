@@ -132,6 +132,8 @@ class _ReportsPageState extends State<ReportsPage> with RouteAware {
   }
 
   void _selectPeriod(String period) {
+    // Employees only see the daily sales view.
+    if (ApiClient.role == 'employee') period = 'Daily';
     final today = DateUtils.dateOnly(DateTime.now());
     setState(() {
       _period = period;
@@ -289,7 +291,11 @@ class _ReportsPageState extends State<ReportsPage> with RouteAware {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 18),
               children: [
-                _PeriodSelector(selected: _period, onSelected: _selectPeriod),
+                _PeriodSelector(
+                  selected: _period,
+                  onSelected: _selectPeriod,
+                  role: ApiClient.role,
+                ),
                 if (_period == 'Custom') ...[
                   const SizedBox(height: 8),
                   _CustomDateRangeCard(
@@ -455,10 +461,15 @@ class _HeaderAction extends StatelessWidget {
 }
 
 class _PeriodSelector extends StatelessWidget {
-  const _PeriodSelector({required this.selected, required this.onSelected});
+  const _PeriodSelector({
+    required this.selected,
+    required this.onSelected,
+    this.role,
+  });
 
   final String selected;
   final ValueChanged<String> onSelected;
+  final String? role;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -469,7 +480,7 @@ class _PeriodSelector extends StatelessWidget {
       borderRadius: BorderRadius.circular(24),
     ),
     child: Row(
-      children: ['Daily', 'Weekly', 'Monthly', 'Yearly', 'Custom'].map((
+      children: (role == 'employee' ? ['Daily'] : ['Daily', 'Weekly', 'Monthly', 'Yearly', 'Custom']).map((
         period,
       ) {
         final isSelected = selected == period;
