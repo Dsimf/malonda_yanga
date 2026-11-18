@@ -314,10 +314,8 @@ class _ReportsPageState extends State<ReportsPage> with RouteAware {
                 if (_loading) const LinearProgressIndicator(),
                 _SummaryCard(period: _period, report: _report ?? const {}, role: ApiClient.role),
                 const SizedBox(height: 11),
-                if (ApiClient.role != 'employee') ...[
-                  _ProfitLossCard(report: _report ?? const {}),
-                  const SizedBox(height: 11),
-                ],
+                _ProfitLossCard(report: _report ?? const {}),
+                const SizedBox(height: 11),
                 _SalesChartCard(days: _dailySales),
                 const SizedBox(height: 11),
                 _SalesLogCard(
@@ -329,8 +327,7 @@ class _ReportsPageState extends State<ReportsPage> with RouteAware {
                   onDeleted: _loadReport,
                 ),
                 const SizedBox(height: 11),
-                if (ApiClient.role != 'employee') ...[
-                  _ProductsSoldCard(
+                _ProductsSoldCard(
                     selectedCategory: _selectedCategory,
                     categories: _categories,
                     reportProducts: _topProducts,
@@ -340,7 +337,6 @@ class _ReportsPageState extends State<ReportsPage> with RouteAware {
                         Navigator.pushNamed(context, '/inventory'),
                   ),
                   const SizedBox(height: 11),
-                ],
                 _PaymentDistributionCard(totals: _paymentTotals),
                 const SizedBox(height: 14),
                 if (ApiClient.role != 'employee') ...[
