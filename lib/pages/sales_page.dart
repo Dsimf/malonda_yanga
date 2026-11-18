@@ -630,9 +630,31 @@ class _SalesAppBar extends StatelessWidget {
           radius: 21,
           backgroundColor: const Color(0xFF083982),
           child: IconButton(
-            onPressed: () => Navigator.pushNamed(context, '/settings'),
-            icon: const Icon(
-              Icons.person_outline_rounded,
+            onPressed: () async {
+              if (ApiClient.isEmployee) {
+                try {
+                  await ApiClient.logout();
+                } on ApiException catch (error) {
+                  if (context.mounted) {
+                    showShopMessage(context, error.message);
+                  }
+                  return;
+                }
+                if (context.mounted) {
+                  Navigator.pushNamedAndRemoveUntil(
+                    context,
+                    '/login',
+                    (route) => false,
+                  );
+                }
+                return;
+              }
+              Navigator.pushNamed(context, '/settings');
+            },
+            icon: Icon(
+              ApiClient.isEmployee
+                  ? Icons.logout_rounded
+                  : Icons.person_outline_rounded,
               color: Colors.white,
               size: 22,
             ),

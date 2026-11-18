@@ -149,7 +149,9 @@ class _EmployeesPageState extends State<EmployeesPage> {
                                   ),
                                 ),
                                 Text(
-                                  'Access: Sales & Daily Sales',
+                                  employee['role'] == 'owner'
+                                      ? 'Full access (Owner)'
+                                      : 'Access: Sales & Daily Sales',
                                   style: const TextStyle(
                                     color: ShopColors.muted,
                                     fontSize: 11,
