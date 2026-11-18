@@ -20,6 +20,11 @@ class _LaybyPageState extends State<LaybyPage>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && ApiClient.isEmployee) {
+        Navigator.pushNamedAndRemoveUntil(context, '/sales', (route) => false);
+      }
+    });
     _laybys = ApiClient.laybys();
     _history = ApiClient.laybyHistory();
     _tabs.addListener(() {

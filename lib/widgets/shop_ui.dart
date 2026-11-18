@@ -23,6 +23,36 @@ const pageRoutes = <String>[
   '/settings',
 ];
 
+/// Navigation destinations available to the signed-in role. Employees only
+/// reach Sales and Reports (daily information); owners get the full shell.
+List<String> navRoutesForRole(String? role) {
+  switch (role) {
+    case 'employee':
+      return const ['/sales', '/reports'];
+    case 'owner':
+    default:
+      return pageRoutes;
+  }
+}
+
+IconData _navIcon(String route) => switch (route) {
+  '/home' => Icons.home_outlined,
+  '/inventory' => Icons.inventory_2_outlined,
+  '/sales' => Icons.point_of_sale_outlined,
+  '/reports' => Icons.bar_chart_rounded,
+  '/settings' => Icons.settings_outlined,
+  _ => Icons.home_outlined,
+};
+
+String _navLabel(String route) => switch (route) {
+  '/home' => 'Home',
+  '/inventory' => 'Inventory',
+  '/sales' => 'Sales',
+  '/reports' => 'Reports',
+  '/settings' => 'Settings',
+  _ => route,
+};
+
 Widget brandMark({double size = 42}) => Container(
   width: size,
   height: size,
@@ -267,43 +297,41 @@ class MetricCard extends StatelessWidget {
 }
 
 class ShopBottomNavigation extends StatelessWidget {
-  const ShopBottomNavigation({super.key, required this.selectedIndex});
+  const ShopBottomNavigation({
+    super.key,
+    required this.selectedIndex,
+    this.role,
+  });
 
   final int selectedIndex;
+  final String? role;
 
   @override
-  Widget build(BuildContext context) => NavigationBar(
-    height: 68,
-    selectedIndex: selectedIndex,
-    backgroundColor: Colors.white,
-    indicatorColor: ShopColors.paleBlue,
-    onDestinationSelected: (index) {
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        pageRoutes[index],
-        (route) => route.isFirst,
-      );
-    },
-    destinations: const [
-      NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Home'),
-      NavigationDestination(
-        icon: Icon(Icons.inventory_2_outlined),
-        label: 'Inventory',
-      ),
-      NavigationDestination(
-        icon: Icon(Icons.point_of_sale_outlined),
-        label: 'Sales',
-      ),
-      NavigationDestination(
-        icon: Icon(Icons.bar_chart_rounded),
-        label: 'Reports',
-      ),
-      NavigationDestination(
-        icon: Icon(Icons.settings_outlined),
-        label: 'Settings',
-      ),
-    ],
-  );
+  Widget build(BuildContext context) {
+    final routes = navRoutesForRole(role);
+    final clamped = selectedIndex.clamp(0, routes.length - 1);
+    return NavigationBar(
+      height: 68,
+      selectedIndex: clamped,
+      backgroundColor: Colors.white,
+      indicatorColor: ShopColors.paleBlue,
+      onDestinationSelected: (index) {
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          routes[index],
+          (route) => route.isFirst,
+        );
+      },
+      destinations: routes
+          .map(
+            (route) => NavigationDestination(
+              icon: Icon(_navIcon(route)),
+              label: _navLabel(route),
+            ),
+          )
+          .toList(),
+    );
+  }
 }
 
 class ShopScaffold extends StatelessWidget {
@@ -311,18 +339,23 @@ class ShopScaffold extends StatelessWidget {
     super.key,
     required this.body,
     required this.selectedIndex,
+    this.role,
     this.floatingActionButton,
   });
 
   final Widget body;
   final int selectedIndex;
+  final String? role;
   final Widget? floatingActionButton;
 
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: ShopColors.surface,
     body: SafeArea(child: body),
-    bottomNavigationBar: ShopBottomNavigation(selectedIndex: selectedIndex),
+    bottomNavigationBar: ShopBottomNavigation(
+      selectedIndex: selectedIndex,
+      role: role,
+    ),
     floatingActionButton: floatingActionButton,
   );
 }

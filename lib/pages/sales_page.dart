@@ -135,7 +135,8 @@ class _SalesPageState extends State<SalesPage> {
 
   @override
   Widget build(BuildContext context) => ShopScaffold(
-    selectedIndex: 2,
+    selectedIndex: 0,
+    role: ApiClient.role,
     body: Column(
       children: [
         _SalesAppBar(

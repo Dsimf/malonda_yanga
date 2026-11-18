@@ -38,7 +38,12 @@ class _LandingPageState extends State<LandingPage> {
       // home page surface them like any other request would.
     }
     if (!mounted) return;
-    Navigator.of(context).pushReplacementNamed('/home');
+    // Cashiers (employees) land on the till; owners land on the home dashboard.
+    if (ApiClient.isEmployee) {
+      Navigator.of(context).pushReplacementNamed('/sales');
+    } else {
+      Navigator.of(context).pushReplacementNamed('/home');
+    }
   }
 
   @override

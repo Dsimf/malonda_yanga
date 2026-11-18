@@ -203,12 +203,22 @@ class _ExpensesPageState extends State<ExpensesPage> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    backgroundColor: ShopColors.surface,
-    body: SafeArea(
-      child: Column(
-        children: [
-          _ExpensesHeader(onBack: () => Navigator.pop(context)),
+  Widget build(BuildContext context) {
+    // Expenses are owner-only; cashiers are redirected to the till.
+    if (ApiClient.isEmployee) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.pushNamedAndRemoveUntil(context, '/sales', (route) => false);
+        }
+      });
+      return const SizedBox.shrink();
+    }
+    return Scaffold(
+      backgroundColor: ShopColors.surface,
+      body: SafeArea(
+        child: Column(
+          children: [
+            _ExpensesHeader(onBack: () => Navigator.pop(context)),
           Expanded(
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
@@ -603,6 +613,7 @@ class _ExpensesPageState extends State<ExpensesPage> {
       ),
     ),
   );
+}
 }
 
 class _ExpensesHeader extends StatelessWidget {

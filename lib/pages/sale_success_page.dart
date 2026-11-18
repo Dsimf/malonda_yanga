@@ -369,7 +369,7 @@ class _SaleSuccessPageState extends State<SaleSuccessPage> {
       body: SafeArea(
         child: Column(
           children: [
-            const _ReceiptAppBar(),
+            _ReceiptAppBar(role: ApiClient.role),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
@@ -617,7 +617,9 @@ class _ReceiptLine {
 }
 
 class _ReceiptAppBar extends StatelessWidget {
-  const _ReceiptAppBar();
+  const _ReceiptAppBar({this.role});
+
+  final String? role;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -671,19 +673,20 @@ class _ReceiptAppBar extends StatelessWidget {
           visualDensity: VisualDensity.compact,
         ),
         const SizedBox(width: 4),
-        CircleAvatar(
-          radius: 16,
-          backgroundColor: const Color(0xFF083982),
-          child: IconButton(
-            padding: EdgeInsets.zero,
-            onPressed: () => Navigator.pushNamed(context, '/settings'),
-            icon: const Icon(
-              Icons.person_outline_rounded,
-              color: Colors.white,
-              size: 17,
+        if (role != 'employee')
+          CircleAvatar(
+            radius: 16,
+            backgroundColor: const Color(0xFF083982),
+            child: IconButton(
+              padding: EdgeInsets.zero,
+              onPressed: () => Navigator.pushNamed(context, '/settings'),
+              icon: const Icon(
+                Icons.person_outline_rounded,
+                color: Colors.white,
+                size: 17,
+              ),
             ),
           ),
-        ),
       ],
     ),
   );

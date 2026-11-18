@@ -26,6 +26,7 @@ class ApiClient {
   static String? _refreshToken;
   static bool _rememberSession = false;
   static bool _testing = false;
+  static String? _role;
 
   static void configureForTesting(http.Client client) {
     _httpClient.close();
@@ -58,6 +59,10 @@ class ApiClient {
       body: {'email': email, 'password': password},
     );
     await _saveSession(response, persist: rememberMe);
+    final user = response['user'];
+    if (user is Map<String, dynamic>) {
+      _role = user['role'] as String?;
+    }
     return response;
   }
 
@@ -65,8 +70,23 @@ class ApiClient {
     await _send('POST', '/auth/password/reset', body: {'email': email.trim()});
   }
 
-  static Future<Map<String, dynamic>> me() async =>
-      (await _send('GET', '/auth/me')) as Map<String, dynamic>;
+  static Future<Map<String, dynamic>> me() async {
+    final response = (await _send('GET', '/auth/me')) as Map<String, dynamic>;
+    final user = response['user'];
+    if (user is Map<String, dynamic>) {
+      _role = user['role'] as String?;
+    }
+    return response;
+  }
+
+  /// The signed-in user's role: `'owner'` or `'employee'`. Populated by
+  /// [login], [register] and [me]; null until the session is established.
+  static String? get role => _role;
+
+  static bool get isEmployee => _role == 'employee';
+  static bool get isOwner => _role == 'owner';
+
+  static void setRole(String? role) => _role = role;
 
   /// Returns true if a previously saved session exists (remember me).
   /// Only considers persisted storage, not the in-memory access token.
@@ -89,6 +109,7 @@ class ApiClient {
   static Future<void> logout() async {
     _accessToken = null;
     _refreshToken = null;
+    _role = null;
     _rememberSession = false;
     await _removeStoredSession();
   }

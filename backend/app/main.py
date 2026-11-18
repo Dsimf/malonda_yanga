@@ -408,11 +408,15 @@ async def current_user(
     return user
 
 
-def _session_response(payload: dict[str, Any], shop: dict[str, Any] | None) -> dict[str, Any]:
+def _session_response(
+    payload: dict[str, Any],
+    shop: dict[str, Any] | None,
+    role: str | None = None,
+) -> dict[str, Any]:
     user = payload.get("user") or payload
     session = payload.get("access_token") is not None
     return {
-        "user": {"id": user.get("id"), "email": user.get("email")},
+        "user": {"id": user.get("id"), "email": user.get("email"), "role": role},
         "shop": shop,
         "access_token": payload.get("access_token"),
         "refresh_token": payload.get("refresh_token"),
@@ -426,6 +430,7 @@ async def _shop_for_user(user: dict[str, Any], token: str) -> dict[str, Any]:
     cached = _shop_cache.get(user["id"])
     if cached is not None:
         return cached
+    # Owner path: the shop this user owns.
     rows = await supabase_request(
         "GET",
         "/rest/v1/shops",
@@ -441,8 +446,32 @@ async def _shop_for_user(user: dict[str, Any], token: str) -> dict[str, Any]:
             _shop_cache.clear()
         _shop_cache[user["id"]] = rows[0]
         return rows[0]
-
+    # Employee path: the shop linked through the invite metadata (set when the
+    # owner created the employee login) or the shop_users row. Reading the
+    # shops table itself is owner-only RLS, so we return a minimal shop ref
+    # built from the trusted auth metadata instead of selecting from shops.
     metadata = user.get("user_metadata") or {}
+    shop_id = metadata.get("shop_id")
+    if not shop_id:
+        rows = await supabase_request(
+            "GET",
+            "/rest/v1/shop_users",
+            token=token,
+            params={
+                "select": "shop_id",
+                "user_id": f"eq.{user['id']}",
+                "limit": "1",
+            },
+        )
+        if rows:
+            shop_id = rows[0].get("shop_id")
+    if shop_id:
+        shop = {"id": shop_id}
+        if len(_shop_cache) > 512:
+            _shop_cache.clear()
+        _shop_cache[user["id"]] = shop
+        return shop
+    # Owner registration flow: create the shop from signup metadata.
     required = ("shop_name", "owner_name", "location", "business_type")
     if any(not metadata.get(key) for key in required):
         raise HTTPException(
@@ -495,6 +524,39 @@ def _bearer_token(
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise HTTPException(status_code=401, detail="Sign in to continue.")
     return credentials.credentials
+
+
+async def _user_role(user: dict[str, Any], token: str) -> str | None:
+    """Resolves the signed-in user's role (owner | employee)."""
+    rows = await supabase_request(
+        "GET",
+        "/rest/v1/shop_users",
+        token=token,
+        params={
+            "select": "role",
+            "user_id": f"eq.{user['id']}",
+            "limit": "1",
+        },
+    )
+    if rows:
+        return rows[0].get("role")
+    metadata = user.get("user_metadata") or {}
+    return metadata.get("role")
+
+
+async def current_user_role(
+    user: dict[str, Any] = Depends(current_user),
+    token: str = Depends(_bearer_token),
+) -> str:
+    role = await _user_role(user, token)
+    return role or "employee"
+
+
+async def require_owner(role: str = Depends(current_user_role)) -> None:
+    if role != "owner":
+        raise HTTPException(
+            status_code=403, detail="Shop owner access required."
+        )
 
 
 @app.get("/health")
@@ -592,7 +654,10 @@ async def register(data: ShopRegistration) -> dict[str, Any]:
     token = payload.get("access_token")
     if token:
         shop = await _shop_for_user(user, token)
-    return _session_response(payload, shop)
+        role = await _user_role(user, token)
+    else:
+        role = None
+    return _session_response(payload, shop, role)
 
 
 @app.post("/auth/password/reset")
@@ -632,7 +697,8 @@ async def login(data: LoginRequest) -> dict[str, Any]:
     if not isinstance(payload, dict) or not payload.get("user"):
         raise HTTPException(status_code=502, detail="Supabase did not return a signed-in user.")
     shop = await _shop_for_user(payload["user"], payload["access_token"])
-    return _session_response(payload, shop)
+    role = await _user_role(payload["user"], payload["access_token"])
+    return _session_response(payload, shop, role)
 
 
 @app.post("/auth/refresh")
@@ -652,9 +718,10 @@ async def refresh(data: RefreshRequest) -> dict[str, Any]:
 async def me(
     user: dict[str, Any] = Depends(current_user),
     token: str = Depends(_bearer_token),
+    role: str = Depends(current_user_role),
 ) -> dict[str, Any]:
     return {
-        "user": {"id": user["id"], "email": user.get("email")},
+        "user": {"id": user["id"], "email": user.get("email"), "role": role},
         "shop": await _shop_for_user(user, token),
     }
 
@@ -1136,6 +1203,7 @@ async def reports(
     end_date: date = Query(),
     user: dict[str, Any] = Depends(current_user),
     token: str = Depends(_bearer_token),
+    role: str = Depends(current_user_role),
 ) -> dict[str, Any]:
     if end_date < start_date:
         raise HTTPException(status_code=422, detail="End date must not precede start date.")
@@ -1223,25 +1291,30 @@ async def reports(
         summary["revenue"] += price * quantity
         total_cost += cost * quantity
 
-    expenses = await _table(
-        "GET",
-        "expenses",
-        token,
-        params={
-            "select": "category,amount",
-            "shop_id": f"eq.{shop['id']}",
-            "and": (
-                f"(spent_on.gte.{start_date},spent_on.lte.{end_date})"
-            ),
-        },
-    )
-    expense_by_category: dict[str, float] = {}
-    for expense in expenses:
-        category = str(expense.get("category") or "Other")
-        expense_by_category[category] = (
-            expense_by_category.get(category, 0.0) + float(expense["amount"])
+    # Expenses are owner-only; employees only see daily sales information.
+    if role == "employee":
+        expense_by_category: dict[str, float] = {}
+        total_expenses = 0
+    else:
+        expenses = await _table(
+            "GET",
+            "expenses",
+            token,
+            params={
+                "select": "category,amount",
+                "shop_id": f"eq.{shop['id']}",
+                "and": (
+                    f"(spent_on.gte.{start_date},spent_on.lte.{end_date})"
+                ),
+            },
         )
-    total_expenses = round(sum(expense_by_category.values()), 2)
+        expense_by_category: dict[str, float] = {}
+        for expense in expenses:
+            category = str(expense.get("category") or "Other")
+            expense_by_category[category] = (
+                expense_by_category.get(category, 0.0) + float(expense["amount"])
+            )
+        total_expenses = round(sum(expense_by_category.values()), 2)
     gross_profit = round(total_sales - total_cost, 2)
 
     return {
@@ -1310,6 +1383,7 @@ async def list_expenses(
     end_date: date = Query(),
     user: dict[str, Any] = Depends(current_user),
     token: str = Depends(_bearer_token),
+    _: None = Depends(require_owner),
 ) -> list[dict[str, Any]]:
     shop = await _owned_shop(user, token)
     return await _table(
@@ -1330,6 +1404,7 @@ async def create_expense(
     data: ExpenseCreate,
     user: dict[str, Any] = Depends(current_user),
     token: str = Depends(_bearer_token),
+    _: None = Depends(require_owner),
 ) -> dict[str, Any]:
     shop = await _owned_shop(user, token)
     rows = await _table(
@@ -1357,6 +1432,7 @@ async def update_expense(
     data: ExpenseUpdate,
     user: dict[str, Any] = Depends(current_user),
     token: str = Depends(_bearer_token),
+    _: None = Depends(require_owner),
 ) -> dict[str, Any]:
     shop = await _owned_shop(user, token)
     updates = data.model_dump(exclude_unset=True, mode="json")
@@ -1381,6 +1457,7 @@ async def delete_expense(
     expense_id: str,
     user: dict[str, Any] = Depends(current_user),
     token: str = Depends(_bearer_token),
+    _: None = Depends(require_owner),
 ) -> dict[str, bool]:
     shop = await _owned_shop(user, token)
     rows = await _table(
@@ -1398,6 +1475,7 @@ async def delete_expense(
 async def list_employees(
     user: dict[str, Any] = Depends(current_user),
     token: str = Depends(_bearer_token),
+    _: None = Depends(require_owner),
 ) -> list[dict[str, Any]]:
     """Employees of this shop (shop_users rows joined with their shop)."""
     shop = await _owned_shop(user, token)
@@ -1418,6 +1496,7 @@ async def create_employee(
     data: EmployeeCreate,
     user: dict[str, Any] = Depends(current_user),
     token: str = Depends(_bearer_token),
+    _: None = Depends(require_owner),
 ) -> dict[str, Any]:
     """Creates a Supabase auth user with the employee role for this shop."""
     shop = await _owned_shop(user, token)
@@ -1460,6 +1539,7 @@ async def delete_employee(
     employee_id: str,
     user: dict[str, Any] = Depends(current_user),
     token: str = Depends(_bearer_token),
+    _: None = Depends(require_owner),
 ) -> dict[str, bool]:
     shop = await _owned_shop(user, token)
     rows = await _table(

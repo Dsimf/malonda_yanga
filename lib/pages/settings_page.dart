@@ -18,6 +18,11 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && ApiClient.isEmployee) {
+        Navigator.pushNamedAndRemoveUntil(context, '/sales', (route) => false);
+      }
+    });
     _shop = ApiClient.shopSettings();
   }
 
@@ -198,7 +203,7 @@ class _SettingsPageState extends State<SettingsPage> {
         ],
       ),
     ),
-    bottomNavigationBar: const _SettingsBottomNavigation(),
+    bottomNavigationBar: _SettingsBottomNavigation(role: ApiClient.role),
   );
 }
 
@@ -502,56 +507,66 @@ class _SettingTile extends StatelessWidget {
 }
 
 class _SettingsBottomNavigation extends StatelessWidget {
-  const _SettingsBottomNavigation();
+  const _SettingsBottomNavigation({this.role});
+
+  final String? role;
 
   @override
-  Widget build(BuildContext context) => Container(
-    decoration: const BoxDecoration(
-      color: Colors.white,
-      boxShadow: [
-        BoxShadow(
-          color: Color(0x10192033),
-          blurRadius: 12,
-          offset: Offset(0, -3),
-        ),
-      ],
-    ),
-    child: SafeArea(
-      top: false,
-      child: SizedBox(
-        height: 62,
-        child: Row(
-          children: [
-            _SettingsNavItem(
-              icon: Icons.home_outlined,
-              label: 'Home',
-              route: '/home',
-            ),
-            _SettingsNavItem(
-              icon: Icons.inventory_2_outlined,
-              label: 'Inventory',
-              route: '/inventory',
-            ),
-            _SettingsNavItem(
-              icon: Icons.point_of_sale_outlined,
-              label: 'Sales',
-              route: '/sales',
-            ),
-            _SettingsNavItem(
-              icon: Icons.bar_chart_rounded,
-              label: 'Reports',
-              route: '/reports',
-            ),
-            _SettingsNavItem(
-              icon: Icons.settings_outlined,
-              label: 'Settings',
-              selected: true,
-            ),
-          ],
+  Widget build(BuildContext context) {
+    final routes = <_SettingsNavInfo>[
+      _SettingsNavInfo(icon: Icons.point_of_sale_outlined, label: 'Sales', route: '/sales'),
+      _SettingsNavInfo(icon: Icons.bar_chart_rounded, label: 'Reports', route: '/reports'),
+    ];
+    if (role != 'employee') {
+      routes.insertAll(0, [
+        _SettingsNavInfo(icon: Icons.home_outlined, label: 'Home', route: '/home'),
+        _SettingsNavInfo(icon: Icons.inventory_2_outlined, label: 'Inventory', route: '/inventory'),
+      ]);
+      routes.add(_SettingsNavInfo(icon: Icons.settings_outlined, label: 'Settings', route: '/settings'));
+    }
+    final selectedRoute = '/settings';
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x10192033),
+            blurRadius: 12,
+            offset: Offset(0, -3),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: 62,
+          child: Row(
+            children: routes
+                .map(
+                  (info) => _SettingsNavItem(
+                    icon: info.icon,
+                    label: info.label,
+                    route: info.route,
+                    selected: info.route == selectedRoute,
+                  ),
+                )
+                .toList(),
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
+}
+
+class _SettingsNavInfo {
+  const _SettingsNavInfo({
+    required this.icon,
+    required this.label,
+    required this.route,
+  });
+  final IconData icon;
+  final String label;
+  final String route;
 }
 
 class _SettingsNavItem extends StatelessWidget {

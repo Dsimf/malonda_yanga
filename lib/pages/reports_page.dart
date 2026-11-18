@@ -284,7 +284,7 @@ class _ReportsPageState extends State<ReportsPage> with RouteAware {
     body: SafeArea(
       child: Column(
         children: [
-          const _ReportsHeader(),
+          _ReportsHeader(role: ApiClient.role),
           Expanded(
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 18),
@@ -306,10 +306,12 @@ class _ReportsPageState extends State<ReportsPage> with RouteAware {
                     style: const TextStyle(color: ShopColors.red, fontSize: 12),
                   ),
                 if (_loading) const LinearProgressIndicator(),
-                _SummaryCard(period: _period, report: _report ?? const {}),
+                _SummaryCard(period: _period, report: _report ?? const {}, role: ApiClient.role),
                 const SizedBox(height: 11),
-                _ProfitLossCard(report: _report ?? const {}),
-                const SizedBox(height: 11),
+                if (ApiClient.role != 'employee') ...[
+                  _ProfitLossCard(report: _report ?? const {}),
+                  const SizedBox(height: 11),
+                ],
                 _SalesChartCard(days: _dailySales),
                 const SizedBox(height: 11),
                 _SalesLogCard(
@@ -321,60 +323,66 @@ class _ReportsPageState extends State<ReportsPage> with RouteAware {
                   onDeleted: _loadReport,
                 ),
                 const SizedBox(height: 11),
-                _ProductsSoldCard(
-                  selectedCategory: _selectedCategory,
-                  categories: _categories,
-                  reportProducts: _topProducts,
-                  onCategorySelected: (category) =>
-                      setState(() => _selectedCategory = category),
-                  onViewInventory: () =>
-                      Navigator.pushNamed(context, '/inventory'),
-                ),
-                const SizedBox(height: 11),
+                if (ApiClient.role != 'employee') ...[
+                  _ProductsSoldCard(
+                    selectedCategory: _selectedCategory,
+                    categories: _categories,
+                    reportProducts: _topProducts,
+                    onCategorySelected: (category) =>
+                        setState(() => _selectedCategory = category),
+                    onViewInventory: () =>
+                        Navigator.pushNamed(context, '/inventory'),
+                  ),
+                  const SizedBox(height: 11),
+                ],
                 _PaymentDistributionCard(totals: _paymentTotals),
                 const SizedBox(height: 14),
-                SizedBox(
-                  height: 53,
-                  child: FilledButton.icon(
-                    onPressed: _exportReport,
-                    icon: const Icon(Icons.download_rounded, size: 20),
-                    label: const Text(
-                      'Export Report (CSV / Excel)',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 15,
+                if (ApiClient.role != 'employee') ...[
+                  SizedBox(
+                    height: 53,
+                    child: FilledButton.icon(
+                      onPressed: _exportReport,
+                      icon: const Icon(Icons.download_rounded, size: 20),
+                      label: const Text(
+                        'Export Report (CSV / Excel)',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                        ),
                       ),
-                    ),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: ShopColors.orange,
-                      foregroundColor: Colors.white,
-                      elevation: 3,
-                      shadowColor: ShopColors.orange.withValues(alpha: .25),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(13),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: ShopColors.orange,
+                        foregroundColor: Colors.white,
+                        elevation: 3,
+                        shadowColor: ShopColors.orange.withValues(alpha: .25),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(13),
+                        ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 7),
-                const Center(
-                  child: Text(
-                    'Exported CSV files open in spreadsheet apps.',
-                    style: TextStyle(color: ShopColors.muted, fontSize: 10),
+                  const SizedBox(height: 7),
+                  const Center(
+                    child: Text(
+                      'Exported CSV files open in spreadsheet apps.',
+                      style: TextStyle(color: ShopColors.muted, fontSize: 10),
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
         ],
       ),
     ),
-    bottomNavigationBar: const _ReportsBottomNavigation(),
+    bottomNavigationBar: _ReportsBottomNavigation(role: ApiClient.role),
   );
 }
 
 class _ReportsHeader extends StatelessWidget {
-  const _ReportsHeader();
+  const _ReportsHeader({this.role});
+
+  final String? role;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -403,28 +411,30 @@ class _ReportsHeader extends StatelessWidget {
             ),
           ),
         ),
-        _HeaderAction(
-          icon: Icons.search_rounded,
-          onPressed: () => Navigator.pushNamed(context, '/inventory'),
-        ),
+        if (role != 'employee')
+          _HeaderAction(
+            icon: Icons.search_rounded,
+            onPressed: () => Navigator.pushNamed(context, '/inventory'),
+          ),
         _HeaderAction(
           icon: Icons.shopping_bag_outlined,
           onPressed: () => Navigator.pushNamed(context, '/sales'),
         ),
         const SizedBox(width: 4),
-        CircleAvatar(
-          radius: 17,
-          backgroundColor: ShopColors.primary,
-          child: IconButton(
-            padding: EdgeInsets.zero,
-            onPressed: () => Navigator.pushNamed(context, '/settings'),
-            icon: const Icon(
-              Icons.person_outline_rounded,
-              color: Colors.white,
-              size: 19,
+        if (role != 'employee')
+          CircleAvatar(
+            radius: 17,
+            backgroundColor: ShopColors.primary,
+            child: IconButton(
+              padding: EdgeInsets.zero,
+              onPressed: () => Navigator.pushNamed(context, '/settings'),
+              icon: const Icon(
+                Icons.person_outline_rounded,
+                color: Colors.white,
+                size: 19,
+              ),
             ),
           ),
-        ),
       ],
     ),
   );
@@ -659,10 +669,15 @@ class _CustomDateRangeCard extends StatelessWidget {
 }
 
 class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({required this.period, required this.report});
+  const _SummaryCard({
+    required this.period,
+    required this.report,
+    this.role,
+  });
 
   final String period;
   final Map<String, dynamic> report;
+  final String? role;
 
   String get _title => switch (period) {
     'Daily' => 'Today’s Summary',
@@ -731,54 +746,56 @@ class _SummaryCard extends StatelessWidget {
             valueColor: ShopColors.primary,
             noteColor: ShopColors.green,
           ),
-          const SizedBox(height: 8),
-          _SummaryMetric(
-            icon: Icons.local_offer_outlined,
-            iconColor: const Color(0xFFB63F00),
-            iconBackground: const Color(0xFFFFECD9),
-            label: 'Total Discounts',
-            detail: 'Amounts given as discounts',
-            value: 'K${discounts.toStringAsFixed(0)}',
-            note: 'For selected period',
-            valueColor: ShopColors.text,
-            noteColor: ShopColors.text,
-          ),
-          const SizedBox(height: 8),
-          _SummaryMetric(
-            icon: Icons.inventory_2_outlined,
-            iconColor: const Color(0xFFB63F00),
-            iconBackground: const Color(0xFFFFDBCC),
-            label: 'Cost of Goods Sold',
-            detail: 'Product purchase cost',
-            value: 'K${cost.toStringAsFixed(0)}',
-            note: 'For selected period',
-            valueColor: ShopColors.text,
-            noteColor: ShopColors.text,
-          ),
-          const SizedBox(height: 8),
-          _SummaryMetric(
-            icon: Icons.trending_up_rounded,
-            iconColor: ShopColors.green,
-            iconBackground: const Color(0xFF6FFBBE),
-            label: 'Gross Profit',
-            detail: 'Revenue minus cost of goods',
-            value: 'K${grossProfit.toStringAsFixed(0)}',
-            note: 'For selected period',
-            valueColor: ShopColors.green,
-            noteColor: ShopColors.green,
-          ),
-          const SizedBox(height: 8),
-          _SummaryMetric(
-            icon: Icons.account_balance_outlined,
-            iconColor: const Color(0xFF7C4DFF),
-            iconBackground: const Color(0xFFEDE7FF),
-            label: 'Net Profit',
-            detail: 'Gross profit minus expenses',
-            value: 'K${netProfit.toStringAsFixed(0)}',
-            note: 'After operating expenses',
-            valueColor: const Color(0xFF7C4DFF),
-            noteColor: const Color(0xFF7C4DFF),
-          ),
+          if (role != 'employee') ...[
+            const SizedBox(height: 8),
+            _SummaryMetric(
+              icon: Icons.local_offer_outlined,
+              iconColor: const Color(0xFFB63F00),
+              iconBackground: const Color(0xFFFFECD9),
+              label: 'Total Discounts',
+              detail: 'Amounts given as discounts',
+              value: 'K${discounts.toStringAsFixed(0)}',
+              note: 'For selected period',
+              valueColor: ShopColors.text,
+              noteColor: ShopColors.text,
+            ),
+            const SizedBox(height: 8),
+            _SummaryMetric(
+              icon: Icons.inventory_2_outlined,
+              iconColor: const Color(0xFFB63F00),
+              iconBackground: const Color(0xFFFFDBCC),
+              label: 'Cost of Goods Sold',
+              detail: 'Product purchase cost',
+              value: 'K${cost.toStringAsFixed(0)}',
+              note: 'For selected period',
+              valueColor: ShopColors.text,
+              noteColor: ShopColors.text,
+            ),
+            const SizedBox(height: 8),
+            _SummaryMetric(
+              icon: Icons.trending_up_rounded,
+              iconColor: ShopColors.green,
+              iconBackground: const Color(0xFF6FFBBE),
+              label: 'Gross Profit',
+              detail: 'Revenue minus cost of goods',
+              value: 'K${grossProfit.toStringAsFixed(0)}',
+              note: 'For selected period',
+              valueColor: ShopColors.green,
+              noteColor: ShopColors.green,
+            ),
+            const SizedBox(height: 8),
+            _SummaryMetric(
+              icon: Icons.account_balance_outlined,
+              iconColor: const Color(0xFF7C4DFF),
+              iconBackground: const Color(0xFFEDE7FF),
+              label: 'Net Profit',
+              detail: 'Gross profit minus expenses',
+              value: 'K${netProfit.toStringAsFixed(0)}',
+              note: 'After operating expenses',
+              valueColor: const Color(0xFF7C4DFF),
+              noteColor: const Color(0xFF7C4DFF),
+            ),
+          ],
         ],
       ),
     );
@@ -2096,56 +2113,65 @@ class _ReportCard extends StatelessWidget {
 }
 
 class _ReportsBottomNavigation extends StatelessWidget {
-  const _ReportsBottomNavigation();
+  const _ReportsBottomNavigation({this.role});
+
+  final String? role;
 
   @override
-  Widget build(BuildContext context) => Container(
-    decoration: const BoxDecoration(
-      color: Colors.white,
-      boxShadow: [
-        BoxShadow(
-          color: Color(0x10192033),
-          blurRadius: 12,
-          offset: Offset(0, -3),
-        ),
-      ],
-    ),
-    child: SafeArea(
-      top: false,
-      child: SizedBox(
-        height: 58,
-        child: Row(
-          children: [
-            _ReportsNavItem(
-              icon: Icons.home_outlined,
-              label: 'Home',
-              route: '/home',
-            ),
-            _ReportsNavItem(
-              icon: Icons.inventory_2_outlined,
-              label: 'Inventory',
-              route: '/inventory',
-            ),
-            _ReportsNavItem(
-              icon: Icons.point_of_sale_outlined,
-              label: 'Sales',
-              route: '/sales',
-            ),
-            _ReportsNavItem(
-              icon: Icons.bar_chart_rounded,
-              label: 'Reports',
-              selected: true,
-            ),
-            _ReportsNavItem(
-              icon: Icons.settings_outlined,
-              label: 'Settings',
-              route: '/settings',
-            ),
-          ],
+  Widget build(BuildContext context) {
+    final routes = <_NavInfo>[
+      _NavInfo(icon: Icons.point_of_sale_outlined, label: 'Sales', route: '/sales'),
+      _NavInfo(icon: Icons.bar_chart_rounded, label: 'Reports', route: '/reports'),
+    ];
+    if (role != 'employee') {
+      routes.insertAll(0, [
+        _NavInfo(icon: Icons.home_outlined, label: 'Home', route: '/home'),
+        _NavInfo(icon: Icons.inventory_2_outlined, label: 'Inventory', route: '/inventory'),
+      ]);
+      routes.add(_NavInfo(icon: Icons.settings_outlined, label: 'Settings', route: '/settings'));
+    }
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x10192033),
+            blurRadius: 12,
+            offset: Offset(0, -3),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: 58,
+          child: Row(
+            children: routes
+                .map(
+                  (info) => _ReportsNavItem(
+                    icon: info.icon,
+                    label: info.label,
+                    route: info.route,
+                    selected: info.route == '/reports',
+                  ),
+                )
+                .toList(),
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
+}
+
+class _NavInfo {
+  const _NavInfo({
+    required this.icon,
+    required this.label,
+    required this.route,
+  });
+  final IconData icon;
+  final String label;
+  final String route;
 }
 
 class _ReportsNavItem extends StatelessWidget {

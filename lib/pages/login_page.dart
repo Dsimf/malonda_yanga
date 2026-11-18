@@ -78,7 +78,9 @@ class _LoginPageState extends State<LoginPage> {
         await _storeCredentials(_rememberMe, email);
       }
       if (!mounted) return;
-      Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+      // Cashiers (employees) land on the till; owners land on the home dashboard.
+      final destination = ApiClient.isEmployee ? '/sales' : '/home';
+      Navigator.pushNamedAndRemoveUntil(context, destination, (route) => false);
     } on ApiException catch (error) {
       if (mounted) setState(() => _errorMessage = error.message);
     } finally {

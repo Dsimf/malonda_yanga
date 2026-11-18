@@ -17,6 +17,11 @@ class _SuppliersPageState extends State<SuppliersPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && ApiClient.isEmployee) {
+        Navigator.pushNamedAndRemoveUntil(context, '/sales', (route) => false);
+      }
+    });
     _suppliers = ApiClient.suppliers();
   }
 

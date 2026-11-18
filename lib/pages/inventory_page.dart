@@ -38,6 +38,11 @@ class _InventoryPageState extends State<InventoryPage> with RouteAware {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && ApiClient.isEmployee) {
+        Navigator.pushNamedAndRemoveUntil(context, '/sales', (route) => false);
+      }
+    });
     _loadProducts();
   }
 

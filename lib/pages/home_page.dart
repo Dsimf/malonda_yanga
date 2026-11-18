@@ -170,7 +170,7 @@ class HomePage extends StatelessWidget {
         ],
       ),
     ),
-    bottomNavigationBar: const _HomeBottomNavigation(),
+    bottomNavigationBar: _HomeBottomNavigation(role: ApiClient.role),
   );
 }
 
@@ -801,56 +801,66 @@ class _NewInventoryCard extends StatelessWidget {
 }
 
 class _HomeBottomNavigation extends StatelessWidget {
-  const _HomeBottomNavigation();
+  const _HomeBottomNavigation({this.role});
+
+  final String? role;
 
   @override
-  Widget build(BuildContext context) => Container(
-    decoration: const BoxDecoration(
-      color: Colors.white,
-      boxShadow: [
-        BoxShadow(
-          color: Color(0x10192033),
-          blurRadius: 12,
-          offset: Offset(0, -3),
-        ),
-      ],
-    ),
-    child: SafeArea(
-      top: false,
-      child: SizedBox(
-        height: 62,
-        child: Row(
-          children: [
-            _HomeNavItem(
-              icon: Icons.home_outlined,
-              label: 'Home',
-              selected: true,
-            ),
-            _HomeNavItem(
-              icon: Icons.inventory_2_outlined,
-              label: 'Inventory',
-              route: '/inventory',
-            ),
-            _HomeNavItem(
-              icon: Icons.point_of_sale_outlined,
-              label: 'Sales',
-              route: '/sales',
-            ),
-            _HomeNavItem(
-              icon: Icons.bar_chart_rounded,
-              label: 'Reports',
-              route: '/reports',
-            ),
-            _HomeNavItem(
-              icon: Icons.settings_outlined,
-              label: 'Settings',
-              route: '/settings',
-            ),
-          ],
+  Widget build(BuildContext context) {
+    final routes = <_HomeNavInfo>[
+      _HomeNavInfo(icon: Icons.point_of_sale_outlined, label: 'Sales', route: '/sales'),
+      _HomeNavInfo(icon: Icons.bar_chart_rounded, label: 'Reports', route: '/reports'),
+    ];
+    if (role != 'employee') {
+      routes.insertAll(0, [
+        _HomeNavInfo(icon: Icons.home_outlined, label: 'Home', route: '/home'),
+        _HomeNavInfo(icon: Icons.inventory_2_outlined, label: 'Inventory', route: '/inventory'),
+      ]);
+      routes.add(_HomeNavInfo(icon: Icons.settings_outlined, label: 'Settings', route: '/settings'));
+    }
+    final selectedRoute = '/home';
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x10192033),
+            blurRadius: 12,
+            offset: Offset(0, -3),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: 62,
+          child: Row(
+            children: routes
+                .map(
+                  (info) => _HomeNavItem(
+                    icon: info.icon,
+                    label: info.label,
+                    route: info.route,
+                    selected: info.route == selectedRoute,
+                  ),
+                )
+                .toList(),
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
+}
+
+class _HomeNavInfo {
+  const _HomeNavInfo({
+    required this.icon,
+    required this.label,
+    required this.route,
+  });
+  final IconData icon;
+  final String label;
+  final String route;
 }
 
 class _HomeNavItem extends StatelessWidget {

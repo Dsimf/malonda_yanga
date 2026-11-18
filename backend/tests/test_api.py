@@ -30,12 +30,19 @@ SHOP = {
     "business_type": "Boutique",
 }
 
+EMPLOYEE_USER = {
+    "id": "00000000-0000-0000-0000-000000000098",
+    "email": "employee@example.com",
+    "user_metadata": {"shop_id": SHOP_ID, "role": "employee", "display_name": "Staff"},
+}
+
 
 class ApiTests(unittest.TestCase):
     def setUp(self) -> None:
         self.client = TestClient(main.app)
         main.app.dependency_overrides[main.current_user] = lambda: USER
         main.app.dependency_overrides[main._bearer_token] = lambda: "test-token"
+        main.app.dependency_overrides[main.current_user_role] = lambda: "owner"
 
     def tearDown(self) -> None:
         main.app.dependency_overrides.clear()
@@ -93,6 +100,8 @@ class ApiTests(unittest.TestCase):
                     "access_token": "access",
                     "refresh_token": "refresh",
                 }
+            if path == "/rest/v1/shop_users":
+                return [{"role": "owner"}]
             if path == "/rest/v1/shops":
                 self.assertEqual(kwargs["token"], "access")
                 return [SHOP]
@@ -290,6 +299,75 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(report["total_discounts"], 24)
         self.assertEqual(report["net_profit"], 80)
         self.assertEqual(report["top_products"][0]["quantity"], 2)
+
+    def test_reports_excludes_expenses_for_employee(self) -> None:
+        async def fake_request(method, path, **kwargs):
+            if path == "/rest/v1/shops":
+                return [SHOP]
+            if path == "/rest/v1/sales":
+                return [
+                    {
+                        "id": "sale-id",
+                        "sold_at": "2026-11-09T08:00:00+00:00",
+                        "total": 240,
+                        "discount": 24,
+                        "payment_method": "Cash",
+                    }
+                ]
+            if path == "/rest/v1/sale_items":
+                return [
+                    {
+                        "sale_id": "sale-id",
+                        "product_id": PRODUCT_ID,
+                        "product_name": "T-Shirt",
+                        "quantity": 2,
+                        "unit_price": 120,
+                        "unit_cost": 80,
+                    }
+                ]
+            if path == "/rest/v1/products":
+                return [
+                    {
+                        "id": PRODUCT_ID,
+                        "name": "T-Shirt",
+                        "category": "T-Shirts",
+                        "quantity": 8,
+                    }
+                ]
+            self.fail(f"Unexpected Supabase request: {path}")
+
+        main.app.dependency_overrides[main.current_user] = lambda: EMPLOYEE_USER
+        main.app.dependency_overrides[main.current_user_role] = lambda: "employee"
+        try:
+            with patch.object(main, "supabase_request", side_effect=fake_request):
+                response = self.client.get(
+                    "/reports",
+                    params={"start_date": "2026-11-09", "end_date": "2026-11-09"},
+                )
+        finally:
+            main.app.dependency_overrides[main.current_user] = lambda: USER
+            main.app.dependency_overrides[main.current_user_role] = lambda: "owner"
+
+        self.assertEqual(response.status_code, 200)
+        report = response.json()
+        self.assertEqual(report["total_sales"], 240)
+        self.assertEqual(report["total_expenses"], 0)
+        self.assertEqual(report["expense_breakdown"], {})
+        self.assertEqual(report["net_profit"], report["gross_profit"])
+
+    def test_expenses_rejected_for_employee(self) -> None:
+        main.app.dependency_overrides[main.current_user] = lambda: EMPLOYEE_USER
+        main.app.dependency_overrides[main.current_user_role] = lambda: "employee"
+        try:
+            response = self.client.get(
+                "/expenses",
+                params={"start_date": "2026-11-09", "end_date": "2026-11-09"},
+            )
+        finally:
+            main.app.dependency_overrides[main.current_user] = lambda: USER
+            main.app.dependency_overrides[main.current_user_role] = lambda: "owner"
+
+        self.assertEqual(response.status_code, 403)
 
     def test_login_rejects_malformed_email(self) -> None:
         response = self.client.post(
