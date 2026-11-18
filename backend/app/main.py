@@ -565,9 +565,10 @@ async def _shop_for_user(user: dict[str, Any], token: str) -> dict[str, Any]:
         _shop_cache[user["id"]] = rows[0]
         return rows[0]
     # Employee path: the shop linked through the invite metadata (set when the
-    # owner created the employee login) or the shop_users row. Reading the
-    # shops table itself is owner-only RLS, so we return a minimal shop ref
-    # built from the trusted auth metadata instead of selecting from shops.
+    # owner created the employee login) or the shop_users row. Shops are
+    # owner-only under RLS, so read the full row with the service role; that
+    # gives employees the real company name, logo and contacts for headers and
+    # receipts instead of a bare id.
     metadata = user.get("user_metadata") or {}
     shop_id = metadata.get("shop_id")
     if not shop_id:
@@ -584,7 +585,27 @@ async def _shop_for_user(user: dict[str, Any], token: str) -> dict[str, Any]:
         if rows:
             shop_id = rows[0].get("shop_id")
     if shop_id:
-        shop = {"id": shop_id}
+        shop: dict[str, Any] = {"id": shop_id}
+        try:
+            owned = await supabase_request(
+                "GET",
+                "/rest/v1/shops",
+                admin=True,
+                params={
+                    "select": "*",
+                    "id": f"eq.{shop_id}",
+                    "limit": "1",
+                },
+            )
+        except HTTPException as error:
+            print(
+                "Employee shop lookup failed (check SUPABASE_SERVICE_ROLE_KEY): "
+                f"{error.status_code} {error.detail}",
+                flush=True,
+            )
+            owned = []
+        if owned:
+            shop = owned[0]
         if len(_shop_cache) > 512:
             _shop_cache.clear()
         _shop_cache[user["id"]] = shop

@@ -570,7 +570,7 @@ create or replace function public.create_shop_sale(
   p_sale_type text default 'Walk-in'
 ) returns jsonb
 language plpgsql
-security invoker
+security definer
 set search_path = public
 as $$
 declare
