@@ -471,6 +471,26 @@ create policy "Shop owners manage shop_users" on public.shop_users
     )
   );
 
+-- If an earlier version of this function exists with a different signature,
+-- 'create or replace' would ADD an overload instead of replacing it, and
+-- PostgREST would then fail every sale with PGRST203 ("Could not choose the
+-- best candidate function"). Drop any stale overload first.
+drop function if exists public.create_shop_sale(
+  uuid, numeric, text, jsonb
+);
+drop function if exists public.create_shop_sale(
+  uuid, numeric, text, jsonb, numeric, text, text
+);
+drop function if exists public.create_shop_sale(
+  uuid, numeric, text, jsonb, numeric, text, text, text
+);
+drop function if exists public.create_shop_sale(
+  uuid, numeric, text, jsonb, numeric, text, text, numeric, text
+);
+drop function if exists public.create_shop_sale(
+  uuid, numeric, text, jsonb, numeric, text, text, text, numeric
+);
+
 create or replace function public.create_shop_sale(
   p_shop_id uuid,
   p_discount_percent numeric,
