@@ -539,7 +539,9 @@ async def _user_role(user: dict[str, Any], token: str) -> str | None:
         },
     )
     if rows:
-        return rows[0].get("role")
+        role = rows[0].get("role")
+        print(f"[DEBUG] _user_role: found shop_users row for user {user['id']}, role={role}")
+        return role
     # Fallback: if the user owns a shop, they're an owner.
     owned = await supabase_request(
         "GET",
@@ -552,12 +554,15 @@ async def _user_role(user: dict[str, Any], token: str) -> str | None:
         },
     )
     if owned:
+        print(f"[DEBUG] _user_role: user {user['id']} owns shop {owned[0]['id']}, returning owner")
         return "owner"
     metadata = user.get("user_metadata") or {}
     role = metadata.get("role")
     # Final fallback: if user has any shop in metadata, they're an owner.
     if not role and metadata.get("shop_id"):
+        print(f"[DEBUG] _user_role: user {user['id']} has shop_id in metadata, returning owner")
         return "owner"
+    print(f"[DEBUG] _user_role: user {user['id']} no role found, metadata={metadata}")
     return role
 
 
