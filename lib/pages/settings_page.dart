@@ -962,7 +962,7 @@ class _DialogLogoPicker extends StatelessWidget {
                   )
                 : Image.network(
                     savedLogoUrl,
-                    fit: BoxFit.contain,
+                    fit: BoxFit.cover,
                     errorBuilder: (_, _, _) => const ColoredBox(
                       color: Colors.white,
                       child: Icon(

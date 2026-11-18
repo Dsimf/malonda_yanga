@@ -164,7 +164,7 @@ class ShopBrandLogo extends StatelessWidget {
             ? Center(child: fallback)
             : Image.network(
                 url,
-                fit: BoxFit.contain,
+                fit: BoxFit.cover,
                 errorBuilder: (_, _, _) => Center(child: fallback),
               ),
       );

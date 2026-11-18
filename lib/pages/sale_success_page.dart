@@ -944,7 +944,7 @@ class _DigitalReceipt extends StatelessWidget {
                     )
                   : Image.network(
                       logoUrl,
-                      fit: BoxFit.contain,
+                      fit: BoxFit.cover,
                       errorBuilder: (_, _, _) => Image.asset(
                         Urban7.logoAsset,
                         fit: BoxFit.contain,
