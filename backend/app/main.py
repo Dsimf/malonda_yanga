@@ -1502,10 +1502,14 @@ async def reports(
         summary["revenue"] += price * quantity
         total_cost += cost * quantity
 
-    expenses = await _table(
+    # Expenses are owner-only under RLS, so employees read them with the
+    # service role; otherwise their report would never subtract expenses from
+    # the net profit.
+    expenses = await supabase_request(
         "GET",
-        "expenses",
-        token,
+        "/rest/v1/expenses",
+        token=token,
+        admin=role != "owner",
         params={
             "select": "category,amount",
             "shop_id": f"eq.{shop['id']}",

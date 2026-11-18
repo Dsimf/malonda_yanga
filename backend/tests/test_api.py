@@ -300,7 +300,7 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(report["net_profit"], 80)
         self.assertEqual(report["top_products"][0]["quantity"], 2)
 
-    def test_reports_excludes_expenses_for_employee(self) -> None:
+    def test_reports_subtracts_expenses_for_employee(self) -> None:
         async def fake_request(method, path, **kwargs):
             if path == "/rest/v1/shops":
                 return [SHOP]
@@ -334,6 +334,9 @@ class ApiTests(unittest.TestCase):
                         "quantity": 8,
                     }
                 ]
+            if path == "/rest/v1/expenses":
+                self.assertTrue(kwargs.get("admin"))
+                return [{"category": "Rent", "amount": 40}]
             self.fail(f"Unexpected Supabase request: {path}")
 
         main.app.dependency_overrides[main.current_user] = lambda: EMPLOYEE_USER
@@ -351,9 +354,9 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         report = response.json()
         self.assertEqual(report["total_sales"], 240)
-        self.assertEqual(report["total_expenses"], 0)
-        self.assertEqual(report["expense_breakdown"], {})
-        self.assertEqual(report["net_profit"], report["gross_profit"])
+        self.assertEqual(report["total_expenses"], 40)
+        self.assertEqual(report["expense_breakdown"], {"Rent": 40})
+        self.assertEqual(report["net_profit"], report["gross_profit"] - 40)
 
     def test_expenses_rejected_for_employee(self) -> None:
         main.app.dependency_overrides[main.current_user] = lambda: EMPLOYEE_USER
