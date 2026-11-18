@@ -1383,30 +1383,25 @@ async def reports(
         summary["revenue"] += price * quantity
         total_cost += cost * quantity
 
-    # Expenses are owner-only; employees only see daily sales information.
-    if role == "employee":
-        expense_by_category: dict[str, float] = {}
-        total_expenses = 0
-    else:
-        expenses = await _table(
-            "GET",
-            "expenses",
-            token,
-            params={
-                "select": "category,amount",
-                "shop_id": f"eq.{shop['id']}",
-                "and": (
-                    f"(spent_on.gte.{start_date},spent_on.lte.{end_date})"
-                ),
-            },
+    expenses = await _table(
+        "GET",
+        "expenses",
+        token,
+        params={
+            "select": "category,amount",
+            "shop_id": f"eq.{shop['id']}",
+            "and": (
+                f"(spent_on.gte.{start_date},spent_on.lte.{end_date})"
+            ),
+        },
+    )
+    expense_by_category: dict[str, float] = {}
+    for expense in expenses:
+        category = str(expense.get("category") or "Other")
+        expense_by_category[category] = (
+            expense_by_category.get(category, 0.0) + float(expense["amount"])
         )
-        expense_by_category: dict[str, float] = {}
-        for expense in expenses:
-            category = str(expense.get("category") or "Other")
-            expense_by_category[category] = (
-                expense_by_category.get(category, 0.0) + float(expense["amount"])
-            )
-        total_expenses = round(sum(expense_by_category.values()), 2)
+    total_expenses = round(sum(expense_by_category.values()), 2)
     gross_profit = round(total_sales - total_cost, 2)
 
     return {
