@@ -1,0 +1,16 @@
+﻿============================= test session starts =============================
+platform win32 -- Python 3.14.7, pytest-9.2.0, pluggy-1.7.0 -- C:\Users\User\Downloads\Documents\sims\prjs\malonda_yanga\backend\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\User\Downloads\Documents\sims\prjs\malonda_yanga
+plugins: anyio-4.16.0
+python : ERROR: file or directory not found: tests/test_api.py
+At line:1 char:1
++ python -m pytest tests/test_api.py -v --tb=short 2>&1 | Out-File -Fil ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (ERROR: file or ...sts/test_api.py:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+collecting ... collected 0 items
+
+============================ no tests ran in 0.17s ============================
+

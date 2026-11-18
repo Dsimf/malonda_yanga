@@ -538,10 +538,15 @@ async def _shop_for_user(user: dict[str, Any], token: str) -> dict[str, Any]:
                 "display_name": metadata["owner_name"],
             },
         )
-    except HTTPException:
+    except HTTPException as error:
         # Row may already exist (backfill/migration); role resolution falls back
-        # to the shop-ownership lookup below.
-        pass
+        # to the shop-ownership lookup below. Surface the reason so a bad
+        # service role key is visible instead of silently losing the row.
+        print(
+            "Could not record the owner in shop_users "
+            f"({error.status_code}): {error.detail}",
+            flush=True,
+        )
     return created[0]
 
 
@@ -590,18 +595,33 @@ async def _user_role(user: dict[str, Any], token: str) -> str | None:
         role = rows[0].get("role")
         print(f"[DEBUG] _user_role: found shop_users row for user {user['id']}, role={role}")
         return role
-    # Fallback: if the user owns a shop, they're an owner.
-    # Use the service role so this lookup is not blocked by missing RLS policies.
-    owned = await supabase_request(
-        "GET",
-        "/rest/v1/shops",
-        admin=True,
-        params={
-            "select": "id",
-            "owner_id": f"eq.{user['id']}",
-            "limit": "1",
-        },
-    )
+    # Fallback: if the user owns a shop, they're an owner. Query with the
+    # user's own token first (the shops RLS policy lets owners read their own
+    # shop), then with the service role, and never let a missing/revoked
+    # SUPABASE_SERVICE_ROLE_KEY break sign-in.
+    params = {
+        "select": "id",
+        "owner_id": f"eq.{user['id']}",
+        "limit": "1",
+    }
+    try:
+        owned = await supabase_request(
+            "GET", "/rest/v1/shops", token=token, params=params
+        )
+    except HTTPException:
+        owned = []
+    if not owned:
+        try:
+            owned = await supabase_request(
+                "GET", "/rest/v1/shops", admin=True, params=params
+            )
+        except HTTPException as error:
+            print(
+                "Shop ownership fallback failed (check "
+                f"SUPABASE_SERVICE_ROLE_KEY): {error.status_code} {error.detail}",
+                flush=True,
+            )
+            owned = []
     if owned:
         print(f"[DEBUG] _user_role: user {user['id']} owns shop {owned[0]['id']}, returning owner")
         return "owner"
