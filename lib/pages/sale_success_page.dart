@@ -43,9 +43,9 @@ class _SaleSuccessPageState extends State<SaleSuccessPage> {
   String _receiptText({
     required String shopName,
     required List<_ReceiptLine> items,
-    required int subtotal,
-    required int discount,
-    required int total,
+    required double subtotal,
+    required double discount,
+    required double total,
     required String paymentMethod,
     String saleType = 'Walk-in',
     String customerName = '',
@@ -66,9 +66,9 @@ class _SaleSuccessPageState extends State<SaleSuccessPage> {
 
   Future<String> _receiptMessage({
     required List<_ReceiptLine> items,
-    required int subtotal,
-    required int discount,
-    required int total,
+    required double subtotal,
+    required double discount,
+    required double total,
     required String paymentMethod,
     String saleType = 'Walk-in',
     String customerName = '',
@@ -89,9 +89,9 @@ class _SaleSuccessPageState extends State<SaleSuccessPage> {
   Future<Uint8List> _receiptPdf({
     required String shopName,
     required List<_ReceiptLine> items,
-    required int subtotal,
-    required int discount,
-    required int total,
+    required double subtotal,
+    required double discount,
+    required double total,
     required String paymentMethod,
     String saleType = 'Walk-in',
     String customerName = '',
@@ -268,9 +268,9 @@ class _SaleSuccessPageState extends State<SaleSuccessPage> {
 
   Future<void> _printReceipt({
     required List<_ReceiptLine> items,
-    required int subtotal,
-    required int discount,
-    required int total,
+    required double subtotal,
+    required double discount,
+    required double total,
     required String paymentMethod,
   }) async {
     try {
@@ -302,9 +302,9 @@ class _SaleSuccessPageState extends State<SaleSuccessPage> {
 
   Future<void> _sendSms({
     required List<_ReceiptLine> items,
-    required int subtotal,
-    required int discount,
-    required int total,
+    required double subtotal,
+    required double discount,
+    required double total,
     required String paymentMethod,
   }) async {
     final phone = _phoneController.text.trim();
@@ -343,9 +343,9 @@ class _SaleSuccessPageState extends State<SaleSuccessPage> {
   Widget build(BuildContext context) {
     final arguments = ModalRoute.of(context)?.settings.arguments;
     final sale = arguments is Map ? arguments : const <Object?, Object?>{};
-    final subtotal = (sale['subtotal'] as num?)?.toInt() ?? 0;
-    final discount = (sale['discount'] as num?)?.toInt() ?? 0;
-    final total = (sale['total'] as num?)?.toInt() ?? 0;
+    final subtotal = (sale['subtotal'] as num?)?.toDouble() ?? 0.0;
+    final discount = (sale['discount'] as num?)?.toDouble() ?? 0.0;
+    final total = (sale['total'] as num?)?.toDouble() ?? 0.0;
     final paymentMethod = sale['paymentMethod'] as String? ?? 'Cash';
     final itemCount = (sale['itemCount'] as num?)?.toInt() ?? 0;
     final rawItems = sale['items'];
@@ -358,7 +358,7 @@ class _SaleSuccessPageState extends State<SaleSuccessPage> {
                   quantity: (item['quantity'] as num?)?.toInt() ?? 1,
                   size: item['size']?.toString() ?? 'M',
                   color: item['color']?.toString() ?? 'Black',
-                  unitPrice: (item['unitPrice'] as num?)?.toInt() ?? 0,
+                  unitPrice: (item['unitPrice'] as num?)?.toDouble() ?? 0.0,
                 ),
               )
               .toList()
@@ -611,9 +611,9 @@ class _ReceiptLine {
   final int quantity;
   final String size;
   final String color;
-  final int unitPrice;
+  final double unitPrice;
 
-  int get total => quantity * unitPrice;
+  double get total => quantity * unitPrice;
 }
 
 class _ReceiptAppBar extends StatelessWidget {
@@ -756,7 +756,7 @@ class _SuccessHeader extends StatelessWidget {
 class _PaymentSummary extends StatelessWidget {
   const _PaymentSummary({required this.total, required this.paymentMethod});
 
-  final int total;
+  final double total;
   final String paymentMethod;
 
   @override
@@ -781,7 +781,7 @@ class _PaymentSummary extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'K$total.00',
+                    'K${total.toStringAsFixed(2)}',
                     style: TextStyle(
                       color: ShopColors.primary,
                       fontSize: 23,
@@ -864,9 +864,9 @@ class _DigitalReceipt extends StatelessWidget {
   final String location;
   final String phone;
   final List<_ReceiptLine> items;
-  final int subtotal;
-  final int discount;
-  final int total;
+  final double subtotal;
+  final double discount;
+  final double total;
   final int itemCount;
   final String saleType;
   final String customerName;
@@ -969,8 +969,8 @@ class _DigitalReceipt extends StatelessWidget {
               _ReceiptItem(
                 title: item.name,
                 details:
-                    'Size ${item.size} • Color: ${item.color} (${item.quantity} × K${item.unitPrice}.00)',
-                price: 'K${item.total}.00',
+                    'Size ${item.size} • Color: ${item.color} (${item.quantity} × K${item.unitPrice.toStringAsFixed(2)})',
+                price: 'K${item.total.toStringAsFixed(2)}',
               ),
               const SizedBox(height: 10),
             ],

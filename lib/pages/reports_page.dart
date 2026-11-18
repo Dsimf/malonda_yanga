@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -10,6 +11,9 @@ import 'inventory_page.dart' show routeObserver;
 
 class ReportsPage extends StatefulWidget {
   const ReportsPage({super.key});
+
+  /// Notify any mounted ReportsPage that report data may have changed.
+  static void notifyRefresh() => _ReportsPageState.notifyRefresh();
 
   @override
   State<ReportsPage> createState() => _ReportsPageState();
@@ -32,6 +36,31 @@ class _ReportsPageState extends State<ReportsPage> with RouteAware {
     'Jeans',
     'Shoes',
   ];
+
+  /// Callback registered by a mounted ReportsPage so that a sale completion
+  /// elsewhere in the app can trigger a refresh of the report data.
+  static VoidCallback? _onRefresh;
+
+  /// Register a callback to refresh this page's report data.
+  /// Returns an unregister function.
+  static VoidCallback registerRefresh(VoidCallback callback) {
+    _onRefresh = callback;
+    return () {
+      if (_onRefresh == callback) _onRefresh = null;
+    };
+  }
+
+  /// Notify any mounted ReportsPage that report data may have changed.
+  static void notifyRefresh() {
+    _onRefresh?.call();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    registerRefresh(() => _loadReport());
+    _loadReport();
+  }
 
   List<Map<String, dynamic>> get _topProducts {
     final products = _report?['top_products'];
@@ -57,12 +86,6 @@ class _ReportsPageState extends State<ReportsPage> with RouteAware {
       const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
       return (weekdays[date.weekday - 1], (entry['total'] as num).round());
     }).toList();
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _loadReport();
   }
 
   @override
@@ -644,6 +667,7 @@ class _SummaryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final sales = (report['total_sales'] as num?)?.toDouble() ?? 0;
     final cost = (report['total_cost'] as num?)?.toDouble() ?? 0;
+    final discounts = (report['total_discounts'] as num?)?.toDouble() ?? 0;
     final grossProfit = (report['gross_profit'] as num?)?.toDouble() ?? (sales - cost);
     final expenses = (report['total_expenses'] as num?)?.toDouble() ?? 0;
     final netProfit = (report['net_profit'] as num?)?.toDouble() ?? (grossProfit - expenses);
@@ -697,6 +721,18 @@ class _SummaryCard extends StatelessWidget {
             note: 'For selected period',
             valueColor: ShopColors.primary,
             noteColor: ShopColors.green,
+          ),
+          const SizedBox(height: 8),
+          _SummaryMetric(
+            icon: Icons.local_offer_outlined,
+            iconColor: const Color(0xFFB63F00),
+            iconBackground: const Color(0xFFFFECD9),
+            label: 'Total Discounts',
+            detail: 'Amounts given as discounts',
+            value: 'K${discounts.toStringAsFixed(0)}',
+            note: 'For selected period',
+            valueColor: ShopColors.text,
+            noteColor: ShopColors.text,
           ),
           const SizedBox(height: 8),
           _SummaryMetric(

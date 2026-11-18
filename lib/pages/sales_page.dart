@@ -5,6 +5,7 @@ import '../services/urban7_branding.dart';
 import '../widgets/barcode_scanner.dart';
 import '../widgets/shop_dialogs.dart';
 import '../widgets/shop_ui.dart';
+import 'reports_page.dart';
 
 class SalesPage extends StatefulWidget {
   const SalesPage({super.key});
@@ -35,22 +36,22 @@ class _SalesPageState extends State<SalesPage> {
 
   int get _itemCount =>
       _cart.values.fold(0, (total, item) => total + item.quantity);
-  int get _subtotal => _cart.entries.fold<int>(0, (total, item) {
+  double get _subtotal => _cart.entries.fold<double>(0, (total, item) {
     final product = _productForId(item.key);
-    return total + ((product.price * item.value.quantity).round());
+    return total + product.price * item.value.quantity;
   });
-  int get _discountAmount => _discountType == 'value'
-      ? _discountValue.round().clamp(0, _subtotal)
-      : (_subtotal * _discountPercent / 100).round();
-  int get _total => _subtotal - _discountAmount;
-  int get _cogs => _cart.entries.fold<int>(0, (total, item) {
+  double get _discountAmount => _discountType == 'value'
+      ? _discountValue.clamp(0, _subtotal)
+      : (_subtotal * _discountPercent / 100);
+  double get _total => _subtotal - _discountAmount;
+  double get _cogs => _cart.entries.fold<double>(0, (total, item) {
     final product = _productForId(item.key);
-    return total + ((product.cost * item.value.quantity).round());
+    return total + product.cost * item.value.quantity;
   });
-  int get _grossProfit => _subtotal - _cogs;
-  int get _netProfit => _total - _cogs;
-  int get _laybyBalance =>
-      _paymentMethod == 'Layby' ? (_total - _laybyDeposit.round()).clamp(0, _total) : 0;
+  double get _grossProfit => _subtotal - _cogs;
+  double get _netProfit => _total - _cogs;
+  double get _laybyBalance =>
+      _paymentMethod == 'Layby' ? (_total - _laybyDeposit).clamp(0, _total) : 0;
 
   bool _argumentsLoadedAndStarted = false;
 
@@ -418,7 +419,7 @@ class _SalesPageState extends State<SalesPage> {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => _LaybyConfirmDialog(
-          deposit: _laybyDeposit.round(),
+          deposit: _laybyDeposit,
           balance: _laybyBalance,
         ),
       );
@@ -454,13 +455,15 @@ class _SalesPageState extends State<SalesPage> {
             .toList(),
       });
       if (!mounted) return;
+      // Notify any mounted ReportsPage so sales figures update immediately.
+      ReportsPage.notifyRefresh();
       Navigator.pushNamed(
         context,
         '/sale/success',
         arguments: {
-          'subtotal': _parseMoneyInt(result['subtotal']),
-          'discount': _parseMoneyInt(result['discount']),
-          'total': _parseMoneyInt(result['total']),
+          'subtotal': _parseMoney(result['subtotal']),
+          'discount': _parseMoney(result['discount']),
+          'total': _parseMoney(result['total']),
           'paymentMethod': _paymentMethod,
           'saleType': _saleType,
           'customerName': customerName,
@@ -486,11 +489,11 @@ class _SalesPageState extends State<SalesPage> {
 }
 
 /// Safely converts a Postgres numeric value (may be a String like "40.00"
-/// or already a num) to an integer.  Returns 0 for null / unparseable values.
-int _parseMoneyInt(dynamic value) {
-  if (value == null) return 0;
-  if (value is num) return value.round();
-  return num.tryParse(value.toString())?.round() ?? 0;
+/// or already a num) to a double.  Returns 0.0 for null / unparseable values.
+double _parseMoney(dynamic value) {
+  if (value == null) return 0.0;
+  if (value is num) return value.toDouble();
+  return num.tryParse(value.toString())?.toDouble() ?? 0.0;
 }
 
 class _SaleProduct {
@@ -1056,12 +1059,12 @@ class _OrderSummary extends StatelessWidget {
   });
 
   final int itemCount;
-  final int subtotal;
+  final double subtotal;
   final String discountType;
   final double discountPercent;
   final double discountValue;
-  final int discountAmount;
-  final int total;
+  final double discountAmount;
+  final double total;
   final TextEditingController discountController;
   final void Function(String type, String value) onDiscountChanged;
   final ValueChanged<String> onDiscountTypeChanged;
@@ -1070,12 +1073,12 @@ class _OrderSummary extends StatelessWidget {
   final String paymentMethod;
   final String saleType;
   final String customerName;
-  final int cogs;
-  final int grossProfit;
-  final int netProfit;
+  final double cogs;
+  final double grossProfit;
+  final double netProfit;
   final ValueChanged<String> onPaymentChanged;
   final VoidCallback? onComplete;
-  final int laybyBalance;
+  final double laybyBalance;
   final ValueChanged<double>? onSetLaybyDeposit;
 
   @override
@@ -1325,7 +1328,7 @@ class _OrderSummary extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    'K$subtotal',
+                    'K${subtotal.toStringAsFixed(2)}',
                     style: const TextStyle(
                       color: ShopColors.text,
                       fontSize: 12,
@@ -1352,7 +1355,7 @@ class _OrderSummary extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '-K$discountAmount',
+                    '-K${discountAmount.toStringAsFixed(2)}',
                     style: const TextStyle(
                       color: ShopColors.green,
                       fontSize: 12,
@@ -1392,7 +1395,7 @@ class _OrderSummary extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    'K$total.00',
+                    'K${total.toStringAsFixed(2)}',
                     style: const TextStyle(
                       color: ShopColors.primary,
                       fontSize: 24,
@@ -1430,7 +1433,7 @@ class _OrderSummary extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    'K$cogs',
+                    'K${cogs.toStringAsFixed(2)}',
                     style: const TextStyle(
                       color: ShopColors.text,
                       fontSize: 12,
@@ -1452,7 +1455,7 @@ class _OrderSummary extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    'K$grossProfit',
+                    'K${grossProfit.toStringAsFixed(2)}',
                     style: const TextStyle(
                       color: ShopColors.green,
                       fontSize: 12,
@@ -1499,7 +1502,7 @@ class _OrderSummary extends StatelessWidget {
                       borderRadius: BorderRadius.circular(30),
                     ),
                     child: Text(
-                      'Net Profit: K$netProfit',
+                      'Net Profit: K${netProfit.toStringAsFixed(2)}',
                       style: const TextStyle(
                         color: ShopColors.green,
                         fontSize: 11,
@@ -1749,8 +1752,8 @@ class _DiscountTypeToggle extends StatelessWidget {
 class _LaybyConfirmDialog extends StatefulWidget {
   const _LaybyConfirmDialog({required this.deposit, required this.balance});
 
-  final int deposit;
-  final int balance;
+  final double deposit;
+  final double balance;
 
   static String? lastNameEntered;
   static String? lastPhoneEntered;

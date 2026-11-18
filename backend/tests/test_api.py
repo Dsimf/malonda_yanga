@@ -232,6 +232,7 @@ class ApiTests(unittest.TestCase):
                         "id": "sale-id",
                         "sold_at": "2026-11-09T08:00:00+00:00",
                         "total": 240,
+                        "discount": 24,
                         "payment_method": "Cash",
                     }
                 ]
@@ -255,6 +256,8 @@ class ApiTests(unittest.TestCase):
                         "quantity": 8,
                     }
                 ]
+            if path == "/rest/v1/expenses":
+                return []
             self.fail(f"Unexpected Supabase request: {path}")
 
         with patch.object(main, "supabase_request", side_effect=fake_request):
@@ -267,6 +270,7 @@ class ApiTests(unittest.TestCase):
         report = response.json()
         self.assertEqual(report["total_sales"], 240)
         self.assertEqual(report["total_cost"], 160)
+        self.assertEqual(report["total_discounts"], 24)
         self.assertEqual(report["net_profit"], 80)
         self.assertEqual(report["top_products"][0]["quantity"], 2)
 

@@ -1160,9 +1160,11 @@ async def reports(
     product_totals: dict[str, dict[str, Any]] = {}
     total_sales = 0.0
     total_cost = 0.0
+    total_discounts = 0.0
 
     for sale in sales:
         amount = float(sale["total"])
+        total_discounts += float(sale.get("discount") or 0)
         local_day = datetime.fromisoformat(
             str(sale["sold_at"]).replace("Z", "+00:00")
         ).astimezone(timezone(timedelta(hours=2))).date().isoformat()
@@ -1224,6 +1226,7 @@ async def reports(
         "items": lines,
         "total_sales": total_sales,
         "total_cost": total_cost,
+        "total_discounts": round(total_discounts, 2),
         "gross_profit": gross_profit,
         "total_expenses": total_expenses,
         "expense_breakdown": expense_by_category,
