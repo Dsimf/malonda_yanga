@@ -66,7 +66,7 @@ class _LandingPageState extends State<LandingPage> {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               stops: [0, .5, 1],
-              colors: [Color(0xD90A1128), Color(0xE6002E7B), Color(0xFA050B1A)],
+              colors: [Color(0x990A1128), Color(0x99002E7B), Color(0xCC050B1A)],
             ),
           ),
         ),
