@@ -535,7 +535,6 @@ void showShopMessage(BuildContext context, String message) {
           ],
         ),
         elevation: 8,
-        margin: const EdgeInsets.fromLTRB(18, 0, 18, 18),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
       ),
     );

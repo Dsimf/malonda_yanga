@@ -1206,12 +1206,17 @@ class _OrderSummary extends StatelessWidget {
                       children: [
                         Icon(Icons.sell_outlined, size: 16, color: ShopColors.orange),
                         SizedBox(width: 4),
-                        Text(
-                          'Apply Discount',
-                          style: TextStyle(
-                            color: ShopColors.muted,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
+                        Flexible(
+                          child: Text(
+                            'Apply Discount',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            softWrap: false,
+                            style: TextStyle(
+                              color: ShopColors.muted,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
                       ],
@@ -1492,32 +1497,42 @@ class _OrderSummary extends StatelessWidget {
                           color: ShopColors.green,
                         ),
                         SizedBox(width: 4),
-                        Text(
-                          'Est. Net Profit',
-                          style: TextStyle(
-                            color: ShopColors.muted,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
+                        Flexible(
+                          child: Text(
+                            'Est. Net Profit',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            softWrap: false,
+                            style: TextStyle(
+                              color: ShopColors.muted,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                            ),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 9,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: ShopColors.greenPale,
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    child: Text(
-                      'Net Profit: K${netProfit.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        color: ShopColors.green,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
+                  Flexible(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: ShopColors.greenPale,
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      child: Text(
+                        'Net Profit: K${netProfit.toStringAsFixed(2)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        softWrap: false,
+                        style: const TextStyle(
+                          color: ShopColors.green,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                     ),
                   ),
@@ -1750,6 +1765,9 @@ class _DiscountTypeToggle extends StatelessWidget {
       ),
       child: Text(
         label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        softWrap: false,
         style: TextStyle(
           fontSize: 11,
           fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
