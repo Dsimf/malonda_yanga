@@ -59,7 +59,9 @@ class _SaleSuccessPageState extends State<SaleSuccessPage> {
               '${item.name} (${item.size}, ${item.color}) x${item.quantity} - K${item.unitPrice * item.quantity}',
         )
         .join('\n');
-    return '${shopName.trim().isEmpty ? '' : '$shopName\n'}Sales receipt\n'
+    return '${shopName.trim().isEmpty ? '' : '$shopName\n'}'
+        '${shopName.trim().isEmpty ? 'Thank you for shopping with us!' : 'Thank you for shopping with ${shopName.trim()}!'}\n'
+        'Sales receipt\n'
         '${customerName.isEmpty ? '' : 'Customer: $customerName\n'}\n'
         '$itemLines\n\n'
         'Subtotal: K${subtotal.toStringAsFixed(2)}\nDiscount: K${discount.toStringAsFixed(2)}\nTotal: K${total.toStringAsFixed(2)}\n'
@@ -133,6 +135,12 @@ class _SaleSuccessPageState extends State<SaleSuccessPage> {
                   fontWeight: pw.FontWeight.bold,
                 ),
               ),
+            pw.Text(
+              shopName.trim().isEmpty
+                  ? 'Thank you for shopping with us!'
+                  : 'Thank you for shopping with ${shopName.trim()}!',
+              style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
+            ),
             if (customerName.isNotEmpty) pw.Text('Customer: $customerName'),
             pw.SizedBox(height: 8),
             pw.Text('$saleType sale receipt'),
@@ -167,8 +175,9 @@ class _SaleSuccessPageState extends State<SaleSuccessPage> {
   /// the PNG bytes, or null when the capture fails (message already shown).
   Future<Uint8List?> _captureReceiptCard() async {
     try {
-      final boundary = _receiptKey.currentContext?.findRenderObject()
-          as RenderRepaintBoundary?;
+      final boundary =
+          _receiptKey.currentContext?.findRenderObject()
+              as RenderRepaintBoundary?;
       if (boundary == null) {
         if (mounted) {
           showShopMessage(context, 'Receipt is not ready yet. Try again.');
@@ -176,9 +185,7 @@ class _SaleSuccessPageState extends State<SaleSuccessPage> {
         return null;
       }
       final image = await boundary.toImage(pixelRatio: 3);
-      final byteData = await image.toByteData(
-        format: ui.ImageByteFormat.png,
-      );
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       final bytes = byteData?.buffer.asUint8List();
       if (bytes == null && mounted) {
         showShopMessage(context, 'Could not capture the receipt image.');
@@ -231,10 +238,7 @@ class _SaleSuccessPageState extends State<SaleSuccessPage> {
       );
     } on PlatformException catch (error) {
       if (mounted) {
-        showShopMessage(
-          context,
-          error.message ?? 'Could not open WhatsApp.',
-        );
+        showShopMessage(context, error.message ?? 'Could not open WhatsApp.');
       }
     }
   }
@@ -424,18 +428,17 @@ class _SaleSuccessPageState extends State<SaleSuccessPage> {
                       return RepaintBoundary(
                         key: _receiptKey,
                         child: _DigitalReceipt(
-                        shopName: (shop['name'] as String?) ?? '',
-                        contactBlock: ShopProfile.contactBlockFor(shop),
-                        logoUrl: shop['logo_url'] as String? ?? '',
-                        location: shop['location'] as String? ?? '',
-                        phone: shop['phone'] as String? ?? '',
-                        items: items,
-                        subtotal: subtotal,
-                        discount: discount,
-                        total: total,
-                        itemCount: itemCount,
-                        saleType: sale['saleType'] as String? ?? 'Walk-in',
-                        customerName: sale['customerName'] as String? ?? '',
+                          shopName: (shop['name'] as String?) ?? '',
+                          contactLines: ShopProfile.contactLinesFor(shop),
+                          logoUrl: shop['logo_url'] as String? ?? '',
+                          location: shop['location'] as String? ?? '',
+                          items: items,
+                          subtotal: subtotal,
+                          discount: discount,
+                          total: total,
+                          itemCount: itemCount,
+                          saleType: sale['saleType'] as String? ?? 'Walk-in',
+                          customerName: sale['customerName'] as String? ?? '',
                         ),
                       );
                     },
@@ -889,10 +892,9 @@ class _PaymentSummary extends StatelessWidget {
 class _DigitalReceipt extends StatelessWidget {
   const _DigitalReceipt({
     required this.shopName,
-    required this.contactBlock,
+    required this.contactLines,
     required this.logoUrl,
     required this.location,
-    required this.phone,
     required this.items,
     required this.subtotal,
     required this.discount,
@@ -903,10 +905,9 @@ class _DigitalReceipt extends StatelessWidget {
   });
 
   final String shopName;
-  final String contactBlock;
+  final List<String> contactLines;
   final String logoUrl;
   final String location;
-  final String phone;
   final List<_ReceiptLine> items;
   final double subtotal;
   final double discount;
@@ -966,6 +967,18 @@ class _DigitalReceipt extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                 ),
               ),
+            const SizedBox(height: 6),
+            Text(
+              shopName.trim().isEmpty
+                  ? 'Thank you for shopping with us!'
+                  : 'Thank you for shopping with ${shopName.trim()}!',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: ShopColors.text,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
             if (customerName.trim().isNotEmpty) ...[
               const SizedBox(height: 5),
               Text(
@@ -977,12 +990,11 @@ class _DigitalReceipt extends StatelessWidget {
                 ),
               ),
             ],
-            const SizedBox(height: 2),
+            const SizedBox(height: 3),
             Text(
               location,
               style: TextStyle(color: ShopColors.muted, fontSize: 10),
             ),
-            Text(phone, style: TextStyle(color: ShopColors.muted, fontSize: 9)),
             const SizedBox(height: 7),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
@@ -1076,18 +1088,20 @@ class _DigitalReceipt extends StatelessWidget {
                 fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              shopName.trim().isEmpty
-                  ? 'Thank you for shopping with us!\n$contactBlock'
-                  : 'Thank you for shopping with ${shopName.trim()}!\n$contactBlock',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: ShopColors.muted,
-                fontSize: 8.5,
-                height: 1.4,
-              ),
-            ),
+            if (contactLines.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              for (final line in contactLines)
+                Text(
+                  line,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: ShopColors.muted,
+                    fontSize: 8.5,
+                    height: 1.4,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+            ],
           ],
         ),
       ),

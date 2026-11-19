@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 
 import 'api_client.dart';
-import 'urban7_branding.dart';
 
 /// Shared cache of the signed-in shop profile (name, contacts and logo).
 ///
@@ -60,27 +59,51 @@ class ShopProfile extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Builds the receipt contact block for [shop], skipping blank channels.
-  /// Falls back to the Urban7 defaults for shops saved before contact
-  /// details could be captured.
-  static String contactBlockFor(Map<String, dynamic> shop) {
+  /// Contact channels as displayed lines on receipts, taken only from the
+  /// details saved by this shop at registration or in settings.
+  ///
+  /// Related channels share a line: TikTok/Instagram and Call/WhatsApp are
+  /// grouped together, and collapsed to a single label when the value is the
+  /// same for both.
+  static List<String> contactLinesFor(Map<String, dynamic> shop) {
+    String value(String key) => (shop[key] as String?)?.trim() ?? '';
+
     final lines = <String>[];
-    void add(String label, String value) {
-      final trimmed = value.trim();
-      if (trimmed.isNotEmpty) lines.add('$label: $trimmed');
+    final email = value('contact_email');
+    if (email.isNotEmpty) lines.add('Email: $email');
+    final facebook = value('facebook');
+    if (facebook.isNotEmpty) lines.add('Facebook: $facebook');
+
+    final instagram = value('instagram');
+    final tiktok = value('tiktok');
+    if (instagram.isNotEmpty && instagram == tiktok) {
+      lines.add('TikTok/Instagram: $instagram');
+    } else {
+      final social = <String>[
+        if (instagram.isNotEmpty) 'Instagram: $instagram',
+        if (tiktok.isNotEmpty) 'TikTok: $tiktok',
+      ];
+      if (social.isNotEmpty) lines.add(social.join('  •  '));
     }
 
-    add('Email', (shop['contact_email'] as String?) ?? '');
-    add('Facebook', (shop['facebook'] as String?) ?? '');
-    add('Instagram', (shop['instagram'] as String?) ?? '');
-    add('TikTok', (shop['tiktok'] as String?) ?? '');
-    add('WhatsApp', (shop['whatsapp'] as String?) ?? '');
-    add('Calls', (shop['calls'] as String?) ?? '');
-    if (lines.isEmpty && ((shop['phone'] as String?) ?? '').trim().isNotEmpty) {
-      add('Phone', (shop['phone'] as String?) ?? '');
+    final calls = value('calls');
+    final whatsapp = value('whatsapp');
+    if (calls.isNotEmpty && calls == whatsapp) {
+      lines.add('Call/WhatsApp: $calls');
+    } else {
+      final phones = <String>[
+        if (calls.isNotEmpty) 'Call: $calls',
+        if (whatsapp.isNotEmpty) 'WhatsApp: $whatsapp',
+      ];
+      if (phones.isNotEmpty) lines.add(phones.join('  •  '));
     }
-    return lines.isEmpty ? Urban7.contactBlock : lines.join('\n');
+    return lines;
   }
+
+  /// Builds the receipt contact block for [shop] from the registered details,
+  /// skipping blank channels. Returns an empty string when none were saved.
+  static String contactBlockFor(Map<String, dynamic> shop) =>
+      contactLinesFor(shop).join('\n');
 }
 
 final shopProfile = ShopProfile();
