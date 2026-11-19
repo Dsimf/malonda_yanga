@@ -1099,52 +1099,14 @@ class _ProductForm extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 5),
-        DropdownButtonFormField<String>(
+        ShopDropdown<String>(
           key: const Key('productSizeDropdown'),
-          initialValue: selectedSize,
-          isExpanded: true,
-          decoration: InputDecoration(
-            prefixIcon: const Icon(
-              Icons.straighten_rounded,
-              size: 19,
-              color: ShopColors.primary,
-            ),
-            filled: true,
-            fillColor: ShopColors.pale,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 14,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(13),
-              borderSide: BorderSide.none,
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(13),
-              borderSide: BorderSide.none,
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(13),
-              borderSide: const BorderSide(
-                color: ShopColors.primary,
-                width: 1.3,
-              ),
-            ),
-          ),
-          items: const [..._kLetterSizes, ..._kNumericSizes]
-              .map(
-                (size) => DropdownMenuItem(
-                  value: size,
-                  child: Text(
-                    size,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              )
-              .toList(),
+          value: selectedSize,
+          label: 'Size',
+          icon: Icons.straighten_rounded,
+          options: const [..._kLetterSizes, ..._kNumericSizes],
+          display: (size) => size,
+          itemIcon: (size) => Icons.aspect_ratio_rounded,
           onChanged: (value) {
             if (value != null) onSizeSelected(value);
           },

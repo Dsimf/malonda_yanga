@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../pages/inventory_page.dart' show showImageSourceSheet;
 import '../services/api_client.dart';
 import '../services/shop_profile.dart';
+import '../widgets/shop_dialogs.dart';
 import '../widgets/shop_ui.dart';
 
 class ShopRegistrationPage extends StatefulWidget {
@@ -157,34 +158,21 @@ class _ShopRegistrationPageState extends State<ShopRegistrationPage> {
                     required: true,
                   ),
                   const SizedBox(height: 7),
-                  DropdownButtonFormField<String>(
+                  ShopDropdown<String>(
                     key: const Key('shopLocationDropdown'),
-                    isExpanded: true,
-                    initialValue: _location,
-                    decoration: _registrationDecoration(
-                      'Select retail branch location',
-                      icon: Icons.location_on_outlined,
-                    ),
-                    items:
-                        const [
-                              'Lusaka (Central / Kamwala / East Park)',
-                              'Kitwe (Copperbelt Hub)',
-                              'Ndola',
-                              'Livingstone (Tourist & Market)',
-                              'Chipata',
-                              'Kabwe',
-                              'Solwezi',
-                            ]
-                            .map(
-                              (location) => DropdownMenuItem(
-                                value: location,
-                                child: Text(
-                                  location,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            )
-                            .toList(),
+                    value: _location,
+                    label: 'Shop Location / City',
+                    icon: Icons.location_on_outlined,
+                    options: const [
+                      'Lusaka (Central / Kamwala / East Park)',
+                      'Kitwe (Copperbelt Hub)',
+                      'Ndola',
+                      'Livingstone (Tourist & Market)',
+                      'Chipata',
+                      'Kabwe',
+                      'Solwezi',
+                    ],
+                    display: (location) => location,
                     validator: (value) =>
                         value == null ? 'Select your shop location' : null,
                     onChanged: (value) => setState(() => _location = value),

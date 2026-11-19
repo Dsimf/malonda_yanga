@@ -838,15 +838,14 @@ class _ProductOptionsDialogState extends State<_ProductOptionsDialog> {
           style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 6),
-        DropdownButtonFormField<String>(
+        ShopDropdown<String>(
           key: const Key('saleSizeDropdown'),
-          initialValue: _size,
-          isExpanded: true,
-          items: const [...Urban7.letterSizes, ...Urban7.numericSizes]
-                  .map(
-                    (size) => DropdownMenuItem(value: size, child: Text(size)),
-                  )
-                  .toList(),
+          value: _size,
+          label: 'Size',
+          icon: Icons.straighten_rounded,
+          options: const [...Urban7.letterSizes, ...Urban7.numericSizes],
+          display: (size) => size,
+          itemIcon: (size) => Icons.aspect_ratio_rounded,
           onChanged: (value) {
             if (value != null) setState(() => _size = value);
           },
@@ -857,15 +856,14 @@ class _ProductOptionsDialogState extends State<_ProductOptionsDialog> {
           style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 6),
-        DropdownButtonFormField<String>(
+        ShopDropdown<String>(
           key: const Key('saleColorDropdown'),
-          initialValue: _color,
-          isExpanded: true,
-          items: const ['Black', 'White', 'Cobalt Blue', 'Crimson Red']
-              .map(
-                (color) => DropdownMenuItem(value: color, child: Text(color)),
-              )
-              .toList(),
+          value: _color,
+          label: 'Color',
+          icon: Icons.palette_outlined,
+          options: const ['Black', 'White', 'Cobalt Blue', 'Crimson Red'],
+          display: (color) => color,
+          itemIcon: (color) => Icons.colorize_rounded,
           onChanged: (value) {
             if (value != null) setState(() => _color = value);
           },

@@ -236,6 +236,113 @@ Future<void> showShopListPopup({
   ),
 );
 
+/// Decoration shared by every dropdown in the app — same rounded 13px frame
+/// as [shopFieldDecoration] but with a soft chevron instead of the default
+/// arrow, and a subtle hover/focus treatment.
+InputDecoration shopDropdownDecoration(String label, {IconData? icon}) =>
+    shopFieldDecoration(label, icon: icon).copyWith(
+      suffixIcon: const Padding(
+        padding: EdgeInsets.only(right: 12),
+        child: Icon(
+          Icons.keyboard_arrow_down_rounded,
+          size: 22,
+          color: ShopColors.muted,
+        ),
+      ),
+      suffixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+      hintStyle: const TextStyle(
+        color: ShopColors.muted,
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+
+/// Brand-styled dropdown used across the app.
+///
+/// Consistent rounded frame, prefix icon, chevron, styled menu items with a
+/// checkmark on the selected value and a smooth open animation.
+class ShopDropdown<T> extends StatelessWidget {
+  const ShopDropdown({
+    super.key,
+    required this.value,
+    required this.options,
+    required this.display,
+    required this.label,
+    required this.onChanged,
+    this.icon,
+    this.itemIcon,
+    this.validator,
+    this.hint,
+  });
+
+  final T? value;
+  final List<T> options;
+  final String Function(T) display;
+  final String label;
+  final IconData? icon;
+  final IconData? Function(T)? itemIcon;
+  final ValueChanged<T?> onChanged;
+  final String? Function(T?)? validator;
+  final String? hint;
+
+  @override
+  Widget build(BuildContext context) {
+    final empty =
+        value == null || (value is String && (value as String).isEmpty);
+    return DropdownButtonFormField<T>(
+      initialValue: empty ? null : value,
+      isExpanded: true,
+      iconSize: 0,
+      dropdownColor: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      elevation: 10,
+      menuMaxHeight: 300,
+      style: const TextStyle(
+        color: ShopColors.text,
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+      ),
+      decoration: shopDropdownDecoration(label, icon: icon).copyWith(
+        hintText: empty ? (hint ?? 'Select $label') : null,
+      ),
+      items: [
+        for (final option in options)
+          DropdownMenuItem<T>(
+            value: option,
+            child: Row(
+              children: [
+                if (itemIcon != null)
+                  ...[
+                    Icon(itemIcon!(option), size: 17, color: ShopColors.primary),
+                    const SizedBox(width: 10),
+                  ],
+                Expanded(
+                  child: Text(
+                    display(option),
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: ShopColors.text,
+                    ),
+                  ),
+                ),
+                if (option == value)
+                  const Icon(
+                    Icons.check_rounded,
+                    size: 18,
+                    color: ShopColors.primary,
+                  ),
+              ],
+            ),
+          ),
+      ],
+      validator: validator,
+      onChanged: onChanged,
+    );
+  }
+}
+
 /// Rounded, brand-styled text field for pop-ups.
 InputDecoration shopFieldDecoration(String label, {IconData? icon}) =>
     InputDecoration(

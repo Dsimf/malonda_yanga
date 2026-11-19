@@ -758,21 +758,15 @@ class _ExpenseDialogState extends State<_ExpenseDialog> {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          DropdownButtonFormField<String>(
-            initialValue: _expenseCategory,
-            isExpanded: true,
-            items: _options(_expenseCategories, _expenseCategory)
-                .map(
-                  (category) => DropdownMenuItem(
-                    value: category,
-                    child: Text(category),
-                  ),
-                )
-                .toList(),
+          ShopDropdown<String>(
+            value: _expenseCategory,
+            label: 'Category',
+            icon: Icons.category_outlined,
+            options: _options(_expenseCategories, _expenseCategory),
+            display: (category) => category,
             onChanged: (value) {
               if (value != null) setState(() => _expenseCategory = value);
             },
-            decoration: shopFieldDecoration('Category'),
           ),
           const SizedBox(height: 9),
           TextField(
@@ -781,19 +775,15 @@ class _ExpenseDialogState extends State<_ExpenseDialog> {
             decoration: shopFieldDecoration('Amount (K)'),
           ),
           const SizedBox(height: 9),
-          DropdownButtonFormField<String>(
-            initialValue: _source,
-            isExpanded: true,
-            items: _options(_sources, _source)
-                .map(
-                  (source) =>
-                      DropdownMenuItem(value: source, child: Text(source)),
-                )
-                .toList(),
+          ShopDropdown<String>(
+            value: _source,
+            label: 'Paid Via',
+            icon: Icons.payments_outlined,
+            options: _options(_sources, _source),
+            display: (source) => source,
             onChanged: (value) {
               if (value != null) setState(() => _source = value);
             },
-            decoration: shopFieldDecoration('Paid Via'),
           ),
           const SizedBox(height: 9),
           InkWell(
