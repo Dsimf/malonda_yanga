@@ -118,6 +118,45 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.json()["access_token"], "access")
         self.assertFalse(response.json()["requires_email_confirmation"])
 
+    def test_login_accepts_shared_company_email_for_staff(self) -> None:
+        async def fake_request(method, path, **kwargs):
+            if path == "/auth/v1/token":
+                email = kwargs["body"]["email"]
+                if email == "company@example.com":
+                    raise main.HTTPException(
+                        status_code=400, detail="Invalid login credentials"
+                    )
+                self.assertEqual(email, "company+staff-abc123@example.com")
+                return {
+                    "user": EMPLOYEE_USER,
+                    "access_token": "access",
+                    "refresh_token": "refresh",
+                }
+            if path == "/rest/v1/shop_users" and kwargs.get("admin"):
+                self.assertEqual(
+                    kwargs["params"]["login_email"], "eq.company@example.com"
+                )
+                return [
+                    {
+                        "login_email": "company@example.com",
+                        "auth_email": "company+staff-abc123@example.com",
+                    }
+                ]
+            if path == "/rest/v1/shop_users":
+                return [{"role": "employee"}]
+            if path == "/rest/v1/shops":
+                return [SHOP]
+            self.fail(f"Unexpected Supabase request: {method} {path}")
+
+        with patch.object(main, "supabase_request", side_effect=fake_request):
+            response = self.client.post(
+                "/auth/login",
+                json={"email": "company@example.com", "password": "staff-pass-123"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["user"]["role"], "employee")
+
     def test_supplier_create_scopes_insert_to_signed_in_shop(self) -> None:
         async def fake_request(method, path, **kwargs):
             if path == "/rest/v1/shops":
@@ -232,14 +271,32 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.json()["total"], 216)
 
     def test_delete_sale_is_scoped_to_signed_in_shop(self) -> None:
+        restored: dict[str, int] = {}
+
         async def fake_request(method, path, **kwargs):
             if path == "/rest/v1/shops":
                 return [SHOP]
+            if path == "/rest/v1/sales" and method == "GET":
+                self.assertEqual(kwargs["params"]["id"], "eq.sale-id")
+                self.assertEqual(kwargs["params"]["shop_id"], f"eq.{SHOP_ID}")
+                return [{"id": "sale-id"}]
             if path == "/rest/v1/sales":
                 self.assertEqual(method, "DELETE")
                 self.assertEqual(kwargs["params"]["id"], "eq.sale-id")
                 self.assertEqual(kwargs["params"]["shop_id"], f"eq.{SHOP_ID}")
                 return [{"id": "sale-id"}]
+            if path == "/rest/v1/sale_items":
+                self.assertEqual(kwargs["params"]["sale_id"], "eq.sale-id")
+                return [{"product_id": PRODUCT_ID, "quantity": 3}]
+            if path == "/rest/v1/products" and method == "GET":
+                self.assertEqual(kwargs["params"]["id"], f"eq.{PRODUCT_ID}")
+                self.assertEqual(kwargs["params"]["shop_id"], f"eq.{SHOP_ID}")
+                return [{"quantity": 5}]
+            if path == "/rest/v1/products":
+                self.assertEqual(method, "PATCH")
+                self.assertEqual(kwargs["body"], {"quantity": 8})
+                restored["quantity"] = kwargs["body"]["quantity"]
+                return [{"id": PRODUCT_ID}]
             self.fail(f"Unexpected Supabase request: {method} {path}")
 
         with patch.object(main, "supabase_request", side_effect=fake_request):
@@ -247,6 +304,7 @@ class ApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["deleted"])
+        self.assertEqual(restored["quantity"], 8)
 
     def test_reports_aggregate_selected_shop_sales_and_cost(self) -> None:
         async def fake_request(method, path, **kwargs):

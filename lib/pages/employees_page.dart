@@ -56,7 +56,8 @@ class _EmployeesPageState extends State<EmployeesPage> {
       if (mounted) {
         showShopMessage(
           context,
-          'Employee created. They now have their own login (Sales & Daily Sales only).',
+          'Employee created. They now have their own login (Sales & Daily Sales only)'
+          ' and can use the company email with their password.',
         );
         _load();
       }
@@ -157,6 +158,15 @@ class _EmployeesPageState extends State<EmployeesPage> {
                                     fontSize: 11,
                                   ),
                                 ),
+                                if ((employee['login_email'] as String? ?? '')
+                                    .isNotEmpty)
+                                  Text(
+                                    'Login: ${employee['login_email']}',
+                                    style: const TextStyle(
+                                      color: ShopColors.muted,
+                                      fontSize: 10,
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
@@ -310,6 +320,12 @@ class _EmployeeDialogState extends State<_EmployeeDialog> {
     content: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        Text(
+          'Staff can sign in with the company email used by the owner — '
+          'each login still has its own password.',
+          style: const TextStyle(color: ShopColors.muted, fontSize: 11),
+        ),
+        const SizedBox(height: 10),
         TextField(
           controller: _nameController,
           decoration: shopFieldDecoration('Employee name'),
@@ -318,7 +334,9 @@ class _EmployeeDialogState extends State<_EmployeeDialog> {
         TextField(
           controller: _emailController,
           keyboardType: TextInputType.emailAddress,
-          decoration: shopFieldDecoration('Login email'),
+          decoration: shopFieldDecoration(
+            'Login email (company email is fine)',
+          ),
         ),
         const SizedBox(height: 9),
         TextField(

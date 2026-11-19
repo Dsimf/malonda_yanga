@@ -8,6 +8,7 @@ from decimal import Decimal
 from functools import lru_cache
 import re
 from typing import Any, Literal
+from uuid import uuid4
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Query
@@ -897,14 +898,71 @@ async def update_password(
     return {"updated": True}
 
 
+async def _shared_email_login(email: str, password: str) -> dict[str, Any] | None:
+    """Signs in a staff member who shares the company email with the owner.
+
+    Each staff auth account has its own internal address (see
+    ``_unique_auth_email``). Try every staff account registered under the
+    shared address with the submitted password and return the first session.
+    """
+    try:
+        rows = await supabase_request(
+            "GET",
+            "/rest/v1/shop_users",
+            admin=True,
+            params={
+                "select": "login_email,auth_email",
+                "role": "eq.employee",
+                "login_email": f"eq.{email}",
+            },
+        )
+    except HTTPException:
+        return None
+    for row in rows or []:
+        auth_email = str(row.get("auth_email") or "").strip()
+        if not auth_email or auth_email == email:
+            continue
+        try:
+            payload = await supabase_request(
+                "POST",
+                "/auth/v1/token",
+                params={"grant_type": "password"},
+                body={"email": auth_email, "password": password},
+            )
+        except HTTPException:
+            continue
+        if isinstance(payload, dict) and payload.get("user"):
+            return payload
+    return None
+
+
+def _staff_auth_email(login_email: str) -> str:
+    """Builds a unique internal auth address for a staff login.
+
+    Supabase only stores one account per email, so staff sharing the company
+    email get a ``+staff-…`` tagged address while still signing in with the
+    plain company email.
+    """
+    local, _, domain = login_email.partition("@")
+    return f"{local}+staff-{uuid4().hex[:10]}@{domain}"
+
+
 @app.post("/auth/login")
 async def login(data: LoginRequest) -> dict[str, Any]:
-    payload = await supabase_request(
-        "POST",
-        "/auth/v1/token",
-        params={"grant_type": "password"},
-        body={"email": data.email, "password": data.password},
-    )
+    try:
+        payload = await supabase_request(
+            "POST",
+            "/auth/v1/token",
+            params={"grant_type": "password"},
+            body={"email": data.email, "password": data.password},
+        )
+    except HTTPException as error:
+        # Staff can sign in with the shared company email. Their auth accounts
+        # live under a unique internal address, so retry those accounts with
+        # the submitted password before rejecting the sign-in.
+        payload = await _shared_email_login(data.email, data.password)
+        if payload is None:
+            raise error
     if not isinstance(payload, dict) or not payload.get("user"):
         raise HTTPException(status_code=502, detail="Supabase did not return a signed-in user.")
     shop = await _shop_for_user(payload["user"], payload["access_token"])
@@ -1224,10 +1282,72 @@ async def delete_sale(
     user: dict[str, Any] = Depends(current_user),
     token: str = Depends(_bearer_token),
 ) -> dict[str, bool]:
-    """Removes a sale and its items (cascade), restoring nothing else —
-    stock was deducted at sale time, so the shop keeper is expected to
-    restock manually if the sale was a mistake."""
+    """Removes a sale and returns every item's quantity to inventory.
+
+    Stock is deducted when a sale is recorded, so deleting a wrong sale must
+    put those units back. Products that were deleted meanwhile are skipped
+    (their sale_items row has a null product_id).
+    """
     shop = await _owned_shop(user, token)
+    sale_rows = await _table(
+        "GET",
+        "sales",
+        token,
+        params={
+            "id": f"eq.{sale_id}",
+            "shop_id": f"eq.{shop['id']}",
+            "select": "id",
+            "limit": "1",
+        },
+    )
+    if not sale_rows:
+        raise HTTPException(status_code=404, detail="Sale not found.")
+    items = await _table(
+        "GET",
+        "sale_items",
+        token,
+        params={"sale_id": f"eq.{sale_id}", "select": "product_id,quantity"},
+    )
+    sold: dict[str, int] = {}
+    for item in items or []:
+        product_id = item.get("product_id")
+        if not product_id:
+            continue
+        try:
+            quantity = int(item.get("quantity") or 0)
+        except (TypeError, ValueError):
+            continue
+        if quantity > 0:
+            sold[str(product_id)] = sold.get(str(product_id), 0) + quantity
+    for product_id, quantity in sold.items():
+        product_rows = await supabase_request(
+            "GET",
+            "/rest/v1/products",
+            admin=True,
+            params={
+                "id": f"eq.{product_id}",
+                "shop_id": f"eq.{shop['id']}",
+                "select": "quantity",
+                "limit": "1",
+            },
+        )
+        if not product_rows:
+            continue
+        try:
+            current = int(product_rows[0].get("quantity") or 0)
+        except (TypeError, ValueError):
+            current = 0
+        await supabase_request(
+            "PATCH",
+            "/rest/v1/products",
+            admin=True,
+            params={
+                "id": f"eq.{product_id}",
+                "shop_id": f"eq.{shop['id']}",
+                "select": "id",
+            },
+            body={"quantity": current + quantity},
+        )
     rows = await _table(
         "DELETE",
         "sales",
@@ -1753,7 +1873,7 @@ async def list_employees(
         "shop_users",
         token,
         params={
-            "select": "id,user_id,role,display_name,created_at",
+            "select": "id,user_id,role,display_name,login_email,created_at",
             "shop_id": f"eq.{shop['id']}",
             "order": "created_at.asc",
         },
@@ -1767,23 +1887,40 @@ async def create_employee(
     token: str = Depends(_bearer_token),
     _: None = Depends(require_owner),
 ) -> dict[str, Any]:
-    """Creates a Supabase auth user with the employee role for this shop."""
+    """Creates a Supabase auth user with the employee role for this shop.
+
+    Staff may reuse the company email used by the owner, so when Supabase
+    rejects the address as already registered the login is created under a
+    unique internal address and still signs in with the company email.
+    """
     shop = await _owned_shop(user, token)
-    payload = await supabase_request(
-        "POST",
-        "/auth/v1/admin/users",
-        admin=True,
-        body={
-            "email": data.email,
-            "password": data.password,
-            "email_confirm": True,
-            "user_metadata": {
-                "shop_id": shop["id"],
-                "role": "employee",
-                "display_name": data.display_name,
+
+    async def _create(auth_email: str) -> dict[str, Any]:
+        return await supabase_request(
+            "POST",
+            "/auth/v1/admin/users",
+            admin=True,
+            body={
+                "email": auth_email,
+                "password": data.password,
+                "email_confirm": True,
+                "user_metadata": {
+                    "shop_id": shop["id"],
+                    "role": "employee",
+                    "display_name": data.display_name,
+                    "login_email": data.email,
+                },
             },
-        },
-    )
+        )
+
+    auth_email = data.email
+    try:
+        payload = await _create(auth_email)
+    except HTTPException as error:
+        if error.status_code >= 500:
+            raise
+        auth_email = _staff_auth_email(data.email)
+        payload = await _create(auth_email)
     if not isinstance(payload, dict) or not payload.get("id"):
         raise HTTPException(status_code=502, detail="Supabase did not create the employee.")
     rows = await _table(
@@ -1796,6 +1933,8 @@ async def create_employee(
             "user_id": payload["id"],
             "role": "employee",
             "display_name": data.display_name,
+            "login_email": data.email,
+            "auth_email": auth_email,
         },
     )
     if not rows:

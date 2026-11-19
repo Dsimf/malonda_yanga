@@ -130,8 +130,18 @@ create table if not exists public.shop_users (
   user_id uuid not null unique references auth.users(id) on delete cascade,
   role text not null default 'employee' check (role in ('owner', 'employee')),
   display_name text not null default '',
+  login_email text not null default '',
+  auth_email text not null default '',
   created_at timestamptz not null default now()
 );
+
+-- Staff logins may share the company email with the owner. Supabase still
+-- needs a unique address per auth user, so `auth_email` keeps the internal
+-- address while `login_email` is the shared address the staff member types.
+alter table public.shop_users
+  add column if not exists login_email text not null default '',
+  add column if not exists auth_email text not null default '';
+create index if not exists shop_users_login_email_idx on public.shop_users (login_email);
 
 insert into public.shop_users (shop_id, user_id, role, display_name)
 select id, owner_id, 'owner', owner_name from public.shops

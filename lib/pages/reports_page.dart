@@ -312,7 +312,11 @@ class _ReportsPageState extends State<ReportsPage> with RouteAware {
                     style: const TextStyle(color: ShopColors.red, fontSize: 12),
                   ),
                 if (_loading) const LinearProgressIndicator(),
-                _SummaryCard(period: _period, report: _report ?? const {}, role: ApiClient.role),
+                _SummaryCard(
+                  period: _period,
+                  report: _report ?? const {},
+                  role: ApiClient.role,
+                ),
                 const SizedBox(height: 11),
                 _ProfitLossCard(report: _report ?? const {}),
                 const SizedBox(height: 11),
@@ -328,15 +332,15 @@ class _ReportsPageState extends State<ReportsPage> with RouteAware {
                 ),
                 const SizedBox(height: 11),
                 _ProductsSoldCard(
-                    selectedCategory: _selectedCategory,
-                    categories: _categories,
-                    reportProducts: _topProducts,
-                    onCategorySelected: (category) =>
-                        setState(() => _selectedCategory = category),
-                    onViewInventory: () =>
-                        Navigator.pushNamed(context, '/inventory'),
-                  ),
-                  const SizedBox(height: 11),
+                  selectedCategory: _selectedCategory,
+                  categories: _categories,
+                  reportProducts: _topProducts,
+                  onCategorySelected: (category) =>
+                      setState(() => _selectedCategory = category),
+                  onViewInventory: () =>
+                      Navigator.pushNamed(context, '/inventory'),
+                ),
+                const SizedBox(height: 11),
                 _PaymentDistributionCard(totals: _paymentTotals),
                 const SizedBox(height: 14),
                 if (ApiClient.role != 'employee') ...[
@@ -483,61 +487,70 @@ class _PeriodSelector extends StatelessWidget {
       borderRadius: BorderRadius.circular(24),
     ),
     child: Row(
-      children: (role == 'employee' ? ['Daily'] : ['Daily', 'Weekly', 'Monthly', 'Yearly', 'Custom']).map((
-        period,
-      ) {
-        final isSelected = selected == period;
-        return Expanded(
-          child: GestureDetector(
-            key: Key('reportPeriod$period'),
-            onTap: () => onSelected(period),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              decoration: BoxDecoration(
-                color: isSelected ? ShopColors.primary : Colors.transparent,
-                borderRadius: BorderRadius.circular(22),
-                boxShadow: isSelected
-                    ? const [
-                        BoxShadow(
-                          color: Color(0x1A002E7B),
-                          blurRadius: 4,
-                          offset: Offset(0, 2),
-                        ),
-                      ]
-                    : null,
-              ),
-              child: Center(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (period == 'Custom') ...[
-                        Icon(
-                          Icons.calendar_today_rounded,
-                          size: 12,
-                          color: isSelected ? Colors.white : ShopColors.text,
-                        ),
-                        const SizedBox(width: 2),
-                      ],
-                      Text(
-                        period,
-                        style: TextStyle(
-                          color: isSelected ? Colors.white : ShopColors.text,
-                          fontSize: 10,
-                          fontWeight: isSelected
-                              ? FontWeight.w700
-                              : FontWeight.w500,
+      children:
+          (role == 'employee'
+                  ? ['Daily']
+                  : ['Daily', 'Weekly', 'Monthly', 'Yearly', 'Custom'])
+              .map((period) {
+                final isSelected = selected == period;
+                return Expanded(
+                  child: GestureDetector(
+                    key: Key('reportPeriod$period'),
+                    onTap: () => onSelected(period),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? ShopColors.primary
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(22),
+                        boxShadow: isSelected
+                            ? const [
+                                BoxShadow(
+                                  color: Color(0x1A002E7B),
+                                  blurRadius: 4,
+                                  offset: Offset(0, 2),
+                                ),
+                              ]
+                            : null,
+                      ),
+                      child: Center(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (period == 'Custom') ...[
+                                Icon(
+                                  Icons.calendar_today_rounded,
+                                  size: 12,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : ShopColors.text,
+                                ),
+                                const SizedBox(width: 2),
+                              ],
+                              Text(
+                                period,
+                                style: TextStyle(
+                                  color: isSelected
+                                      ? Colors.white
+                                      : ShopColors.text,
+                                  fontSize: 10,
+                                  fontWeight: isSelected
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ],
+                    ),
                   ),
-                ),
-              ),
-            ),
-          ),
-        );
-      }).toList(),
+                );
+              })
+              .toList(),
     ),
   );
 }
@@ -683,11 +696,7 @@ class _CustomDateRangeCard extends StatelessWidget {
 }
 
 class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({
-    required this.period,
-    required this.report,
-    this.role,
-  });
+  const _SummaryCard({required this.period, required this.report, this.role});
 
   final String period;
   final Map<String, dynamic> report;
@@ -706,9 +715,11 @@ class _SummaryCard extends StatelessWidget {
     final sales = (report['total_sales'] as num?)?.toDouble() ?? 0;
     final cost = (report['total_cost'] as num?)?.toDouble() ?? 0;
     final discounts = (report['total_discounts'] as num?)?.toDouble() ?? 0;
-    final grossProfit = (report['gross_profit'] as num?)?.toDouble() ?? (sales - cost);
+    final grossProfit =
+        (report['gross_profit'] as num?)?.toDouble() ?? (sales - cost);
     final expenses = (report['total_expenses'] as num?)?.toDouble() ?? 0;
-    final netProfit = (report['net_profit'] as num?)?.toDouble() ?? (grossProfit - expenses);
+    final netProfit =
+        (report['net_profit'] as num?)?.toDouble() ?? (grossProfit - expenses);
     final invoices = (report['sale_count'] as num?)?.toInt() ?? 0;
     return _ReportCard(
       child: Column(
@@ -827,7 +838,8 @@ class _ProfitLossCard extends StatelessWidget {
     final cost = (report['total_cost'] as num?)?.toDouble() ?? 0;
     final expenses = (report['total_expenses'] as num?)?.toDouble() ?? 0;
     final grossProfit = sales - cost;
-    final netProfit = (report['net_profit'] as num?)?.toDouble() ?? grossProfit - expenses;
+    final netProfit =
+        (report['net_profit'] as num?)?.toDouble() ?? grossProfit - expenses;
     final grossMargin = sales > 0 ? grossProfit / sales * 100 : 0.0;
     final netMargin = sales > 0 ? netProfit / sales * 100 : 0.0;
     final invoiceCount = (report['sale_count'] as num?)?.toInt() ?? 0;
@@ -867,8 +879,11 @@ class _ProfitLossCard extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.calculate_rounded,
-                        color: ShopColors.primary, size: 14),
+                    const Icon(
+                      Icons.calculate_rounded,
+                      color: ShopColors.primary,
+                      size: 14,
+                    ),
                     const SizedBox(width: 4),
                     const Text(
                       'STEP 1: GROSS PROFIT',
@@ -898,9 +913,13 @@ class _ProfitLossCard extends StatelessWidget {
                         ),
                         child: Column(
                           children: [
-                            const Text('Sales Revenue',
-                                style: TextStyle(
-                                    color: ShopColors.muted, fontSize: 9)),
+                            const Text(
+                              'Sales Revenue',
+                              style: TextStyle(
+                                color: ShopColors.muted,
+                                fontSize: 9,
+                              ),
+                            ),
                             const SizedBox(height: 2),
                             Text(
                               'K${sales.toStringAsFixed(0)}',
@@ -910,21 +929,28 @@ class _ProfitLossCard extends StatelessWidget {
                                 fontWeight: FontWeight.w800,
                               ),
                             ),
-                            Text('$invoiceCount Invoices',
-                                style: const TextStyle(
-                                    color: ShopColors.green,
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w700)),
+                            Text(
+                              '$invoiceCount Invoices',
+                              style: const TextStyle(
+                                color: ShopColors.green,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                           ],
                         ),
                       ),
                     ),
                     const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 6),
-                      child: Text('−', style: TextStyle(
+                      child: Text(
+                        '−',
+                        style: TextStyle(
                           color: ShopColors.muted,
                           fontSize: 15,
-                          fontWeight: FontWeight.w800)),
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
                     ),
                     Expanded(
                       child: Container(
@@ -935,9 +961,13 @@ class _ProfitLossCard extends StatelessWidget {
                         ),
                         child: Column(
                           children: [
-                            const Text('COGS (Cost)',
-                                style: TextStyle(
-                                    color: ShopColors.muted, fontSize: 9)),
+                            const Text(
+                              'COGS (Cost)',
+                              style: TextStyle(
+                                color: ShopColors.muted,
+                                fontSize: 9,
+                              ),
+                            ),
                             const SizedBox(height: 2),
                             Text(
                               'K${cost.toStringAsFixed(0)}',
@@ -947,9 +977,13 @@ class _ProfitLossCard extends StatelessWidget {
                                 fontWeight: FontWeight.w800,
                               ),
                             ),
-                            const Text('Direct Items',
-                                style: TextStyle(
-                                    color: ShopColors.muted, fontSize: 9)),
+                            const Text(
+                              'Direct Items',
+                              style: TextStyle(
+                                color: ShopColors.muted,
+                                fontSize: 9,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -959,23 +993,29 @@ class _ProfitLossCard extends StatelessWidget {
                 const SizedBox(height: 9),
                 Row(
                   children: [
-                    const Text('  =  Gross Profit',
-                        style: TextStyle(
-                            color: ShopColors.text,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800)),
+                    const Text(
+                      '  =  Gross Profit',
+                      style: TextStyle(
+                        color: ShopColors.text,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                     const Spacer(),
                     Text(
                       'K${grossProfit.toStringAsFixed(0)}',
                       style: const TextStyle(
-                          color: ShopColors.primary,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800),
+                        color: ShopColors.primary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                     const SizedBox(width: 6),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 3),
+                        horizontal: 6,
+                        vertical: 3,
+                      ),
                       decoration: BoxDecoration(
                         color: ShopColors.paleBlue,
                         borderRadius: BorderRadius.circular(20),
@@ -983,9 +1023,10 @@ class _ProfitLossCard extends StatelessWidget {
                       child: Text(
                         '${grossMargin.toStringAsFixed(1)}%',
                         style: const TextStyle(
-                            color: ShopColors.primary,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800),
+                          color: ShopColors.primary,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                     ),
                   ],
@@ -1011,8 +1052,11 @@ class _ProfitLossCard extends StatelessWidget {
                     color: const Color(0xFFFFDBCC),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(Icons.receipt_long_rounded,
-                      color: ShopColors.orange, size: 18),
+                  child: const Icon(
+                    Icons.receipt_long_rounded,
+                    color: ShopColors.orange,
+                    size: 18,
+                  ),
                 ),
                 const SizedBox(width: 9),
                 Expanded(
@@ -1042,20 +1086,27 @@ class _ProfitLossCard extends StatelessWidget {
                   ),
                 ),
                 TextButton.icon(
-                  onPressed: () =>
-                      Navigator.pushNamed(context, '/expenses'),
-                  icon: const Text('Manage Expenses',
-                      style: TextStyle(
-                          color: ShopColors.primary,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700)),
-                  label: const Icon(Icons.arrow_forward_rounded,
-                      color: ShopColors.primary, size: 14),
+                  onPressed: () => Navigator.pushNamed(context, '/expenses'),
+                  icon: const Text(
+                    'Manage Expenses',
+                    style: TextStyle(
+                      color: ShopColors.primary,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  label: const Icon(
+                    Icons.arrow_forward_rounded,
+                    color: ShopColors.primary,
+                    size: 14,
+                  ),
                   style: TextButton.styleFrom(
                     backgroundColor: Colors.white,
                     foregroundColor: ShopColors.primary,
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 9, vertical: 5),
+                      horizontal: 9,
+                      vertical: 5,
+                    ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                       side: const BorderSide(color: Color(0xFFE0E3E9)),
@@ -1084,8 +1135,11 @@ class _ProfitLossCard extends StatelessWidget {
                     color: ShopColors.green,
                     borderRadius: BorderRadius.circular(11),
                   ),
-                  child: const Icon(Icons.trending_up_rounded,
-                      color: Colors.white, size: 24),
+                  child: const Icon(
+                    Icons.trending_up_rounded,
+                    color: Colors.white,
+                    size: 24,
+                  ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -1094,31 +1148,41 @@ class _ProfitLossCard extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          const Text('Net Profit',
-                              style: TextStyle(
-                                  color: ShopColors.text,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w800)),
+                          const Text(
+                            'Net Profit',
+                            style: TextStyle(
+                              color: ShopColors.text,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
                           const SizedBox(width: 6),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: const Color(0xFF6FFBBE),
                               borderRadius: BorderRadius.circular(20),
                             ),
-                            child: const Text('Safe Target',
-                                style: TextStyle(
-                                    color: ShopColors.green,
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w800)),
+                            child: const Text(
+                              'Safe Target',
+                              style: TextStyle(
+                                color: ShopColors.green,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
                           ),
                         ],
                       ),
                       Text(
                         'Gross Profit (K${grossProfit.toStringAsFixed(0)}) − OPEX (K${expenses.toStringAsFixed(0)})',
                         style: const TextStyle(
-                            color: ShopColors.muted, fontSize: 10),
+                          color: ShopColors.muted,
+                          fontSize: 10,
+                        ),
                       ),
                     ],
                   ),
@@ -1140,9 +1204,10 @@ class _ProfitLossCard extends StatelessWidget {
                     Text(
                       'Margin: ${netMargin.toStringAsFixed(1)}%',
                       style: const TextStyle(
-                          color: ShopColors.green,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700),
+                        color: ShopColors.green,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ],
                 ),
@@ -1264,7 +1329,7 @@ class _SalesLogCardState extends State<_SalesLogCard> {
         title: const Text('Delete sale?'),
         content: Text(
           'This removes the K${(sale['total'] as num?)?.toStringAsFixed(2) ?? '0'} '
-          'record permanently. Sold stock will not be returned automatically.',
+          'record permanently. Sold stock will be returned to inventory.',
         ),
         actions: [
           TextButton(
@@ -2134,15 +2199,33 @@ class _ReportsBottomNavigation extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final routes = <_NavInfo>[
-      _NavInfo(icon: Icons.point_of_sale_outlined, label: 'Sales', route: '/sales'),
-      _NavInfo(icon: Icons.bar_chart_rounded, label: 'Reports', route: '/reports'),
+      _NavInfo(
+        icon: Icons.point_of_sale_outlined,
+        label: 'Sales',
+        route: '/sales',
+      ),
+      _NavInfo(
+        icon: Icons.bar_chart_rounded,
+        label: 'Reports',
+        route: '/reports',
+      ),
     ];
     if (role != 'employee') {
       routes.insertAll(0, [
         _NavInfo(icon: Icons.home_outlined, label: 'Home', route: '/home'),
-        _NavInfo(icon: Icons.inventory_2_outlined, label: 'Inventory', route: '/inventory'),
+        _NavInfo(
+          icon: Icons.inventory_2_outlined,
+          label: 'Inventory',
+          route: '/inventory',
+        ),
       ]);
-      routes.add(_NavInfo(icon: Icons.settings_outlined, label: 'Settings', route: '/settings'));
+      routes.add(
+        _NavInfo(
+          icon: Icons.settings_outlined,
+          label: 'Settings',
+          route: '/settings',
+        ),
+      );
     }
     return Container(
       decoration: const BoxDecoration(
