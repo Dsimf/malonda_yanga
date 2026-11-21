@@ -286,17 +286,18 @@ class ShopCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     padding: padding,
-    decoration: BoxDecoration(
-      color: color,
-      borderRadius: BorderRadius.circular(borderRadius),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x0C192033),
-          blurRadius: 16,
-          offset: Offset(0, 5),
-        ),
-      ],
-    ),
+     decoration: BoxDecoration(
+       color: color,
+       borderRadius: BorderRadius.circular(borderRadius),
+       border: Border.all(color: const Color(0x0F000000)),
+       boxShadow: const [
+         BoxShadow(
+           color: Color(0x0A192033),
+           blurRadius: 24,
+           offset: Offset(0, 8),
+         ),
+       ],
+     ),
     child: child,
   );
 }

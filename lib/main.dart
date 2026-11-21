@@ -27,16 +27,26 @@ class Urban7App extends StatelessWidget {
     return MaterialApp(
       title: Urban7.appName,
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        scaffoldBackgroundColor: ShopColors.surface,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: ShopColors.primary,
-          primary: ShopColors.primary,
-          secondary: ShopColors.orange,
-          surface: ShopColors.surface,
-        ),
-        fontFamily: 'Roboto',
+       theme: ThemeData(
+         useMaterial3: true,
+         brightness: Brightness.light,
+         scaffoldBackgroundColor: ShopColors.surface,
+         colorScheme: ColorScheme.fromSeed(
+           seedColor: ShopColors.primary,
+           primary: ShopColors.primary,
+           secondary: ShopColors.orange,
+           surface: ShopColors.surface,
+           brightness: Brightness.light,
+         ),
+         fontFamily: 'Roboto',
+         textTheme: const TextTheme(
+           headlineLarge: TextStyle(fontWeight: FontWeight.w800, letterSpacing: -.5),
+           headlineMedium: TextStyle(fontWeight: FontWeight.w800, letterSpacing: -.4),
+           titleLarge: TextStyle(fontWeight: FontWeight.w700, letterSpacing: -.2),
+           titleMedium: TextStyle(fontWeight: FontWeight.w600),
+           bodyLarge: TextStyle(height: 1.4),
+           bodyMedium: TextStyle(height: 1.4),
+         ),
         dialogTheme: DialogThemeData(
           backgroundColor: Colors.white,
           shape: RoundedRectangleBorder(
@@ -81,7 +91,18 @@ class Urban7App extends StatelessWidget {
           ),
         ),
       ),
-      initialRoute: '/welcome',
+         darkTheme: ThemeData(
+         useMaterial3: true,
+         brightness: Brightness.dark,
+         colorScheme: ColorScheme.fromSeed(
+           seedColor: ShopColors.primary,
+           primary: ShopColors.primary,
+           secondary: ShopColors.orange,
+           brightness: Brightness.dark,
+         ),
+       ),
+       themeMode: ThemeMode.system,
+       initialRoute: '/welcome',
       navigatorObservers: [routeObserver],
       routes: {
         '/welcome': (_) => const LandingPage(),
