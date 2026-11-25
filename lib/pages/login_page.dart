@@ -544,11 +544,6 @@ class _LoginFormCard extends StatelessWidget {
               border: InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(vertical: 15),
             ),
-            style: const TextStyle(
-              fontSize: 17,
-              letterSpacing: 1,
-              fontWeight: FontWeight.w800,
-            ),
           ),
         ),
         const SizedBox(height: 16),

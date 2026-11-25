@@ -236,6 +236,11 @@ class _InventoryPageState extends State<InventoryPage> with RouteAware {
                       controller: _searchController,
                       focusNode: _searchFocusNode,
                       onChanged: (value) => setState(() => _query = value),
+                      style: const TextStyle(
+                        color: ShopColors.text,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
                       decoration: InputDecoration(
                         hintText: 'Search products...',
                         hintStyle: const TextStyle(

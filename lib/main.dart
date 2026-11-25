@@ -42,14 +42,39 @@ class Urban7App extends StatelessWidget {
          // pubspec.yaml and is not installed on Windows, so declaring it
          // forces a fallback font with synthesized (fuzzy) bold weights.
          // Omitting it uses each platform's crisp native font.
-         textTheme: const TextTheme(
-           headlineLarge: TextStyle(fontWeight: FontWeight.w800, letterSpacing: -.5),
-           headlineMedium: TextStyle(fontWeight: FontWeight.w800, letterSpacing: -.4),
-           titleLarge: TextStyle(fontWeight: FontWeight.w700, letterSpacing: -.2),
-           titleMedium: TextStyle(fontWeight: FontWeight.w600),
-           bodyLarge: TextStyle(height: 1.4),
-           bodyMedium: TextStyle(height: 1.4),
-         ),
+textTheme: TextTheme(
+            headlineLarge: TextStyle(
+              color: ShopColors.text,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -.5,
+            ),
+            headlineMedium: TextStyle(
+              color: ShopColors.text,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -.4,
+            ),
+            titleLarge: TextStyle(
+              color: ShopColors.text,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -.2,
+            ),
+            titleMedium: TextStyle(
+              color: ShopColors.text,
+              fontWeight: FontWeight.w600,
+            ),
+            bodyLarge: TextStyle(
+              color: ShopColors.text,
+              height: 1.4,
+            ),
+            bodyMedium: TextStyle(
+              color: ShopColors.text,
+              height: 1.4,
+            ),
+            labelLarge: TextStyle(
+              color: ShopColors.text,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         dialogTheme: DialogThemeData(
           backgroundColor: Colors.white,
           shape: RoundedRectangleBorder(

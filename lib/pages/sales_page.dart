@@ -156,6 +156,11 @@ class _SalesPageState extends State<SalesPage> {
                       height: 54,
                       child: TextField(
                         controller: _searchController,
+                        style: const TextStyle(
+                          color: ShopColors.text,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
                         decoration: InputDecoration(
                           hintText: 'Search products or scan barcode',
                           hintStyle: const TextStyle(
