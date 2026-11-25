@@ -1165,6 +1165,11 @@ class _OrderSummary extends StatelessWidget {
         TextField(
           key: const Key('receiptCustomerNameField'),
           onChanged: onCustomerNameChanged,
+          style: const TextStyle(
+            color: ShopColors.text,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
           decoration: InputDecoration(
             hintText: 'e.g. Kondwani Mwape (Optional)',
             hintStyle: const TextStyle(color: ShopColors.outline, fontSize: 14),
@@ -1281,6 +1286,7 @@ class _OrderSummary extends StatelessWidget {
                                 decimal: true,
                               ),
                               style: const TextStyle(
+                                color: ShopColors.text,
                                 fontSize: 16,
                                 fontWeight: FontWeight.w700,
                               ),

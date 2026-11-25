@@ -1075,4 +1075,14 @@ InputDecoration _registrationDecoration(String hint, {IconData? icon}) =>
         borderRadius: BorderRadius.circular(11),
         borderSide: const BorderSide(color: ShopColors.red, width: 1.3),
       ),
+      labelStyle: const TextStyle(
+        color: ShopColors.text,
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+      ),
+      floatingLabelStyle: const TextStyle(
+        color: ShopColors.primary,
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+      ),
     );

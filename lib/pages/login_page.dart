@@ -471,6 +471,11 @@ class _LoginFormCard extends StatelessWidget {
             controller: emailController,
             keyboardType: TextInputType.emailAddress,
             autocorrect: false,
+            style: const TextStyle(
+              color: ShopColors.text,
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
+            ),
             decoration: const InputDecoration(
               prefixIcon: Icon(Icons.email_outlined),
               hintText: 'you@example.com',
@@ -514,6 +519,12 @@ class _LoginFormCard extends StatelessWidget {
             key: const Key('loginPasswordField'),
             controller: passwordController,
             obscureText: obscurePassword,
+            style: const TextStyle(
+              color: ShopColors.text,
+              fontSize: 17,
+              letterSpacing: 1,
+              fontWeight: FontWeight.w800,
+            ),
             decoration: InputDecoration(
               prefixIcon: const Icon(
                 Icons.lock_outline_rounded,

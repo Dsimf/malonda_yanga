@@ -448,7 +448,7 @@ class ShopBottomNavigation extends StatelessWidget {
       height: 68,
       selectedIndex: clamped,
       backgroundColor: Colors.white,
-      indicatorColor: ShopColors.paleBlue,
+      indicatorColor: ShopColors.primary.withValues(alpha: .12),
       onDestinationSelected: (index) {
         Navigator.pushNamedAndRemoveUntil(
           context,
@@ -516,6 +516,16 @@ InputDecoration shopInputDecoration(
   focusedBorder: OutlineInputBorder(
     borderRadius: BorderRadius.circular(12),
     borderSide: const BorderSide(color: ShopColors.primary, width: 1.4),
+  ),
+  labelStyle: const TextStyle(
+    color: ShopColors.text,
+    fontSize: 14,
+    fontWeight: FontWeight.w600,
+  ),
+  floatingLabelStyle: const TextStyle(
+    color: ShopColors.primary,
+    fontSize: 14,
+    fontWeight: FontWeight.w600,
   ),
 );
 

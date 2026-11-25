@@ -38,7 +38,10 @@ class Urban7App extends StatelessWidget {
            surface: ShopColors.surface,
            brightness: Brightness.light,
          ),
-         fontFamily: 'Roboto',
+         // No fontFamily here on purpose: Roboto is not bundled in
+         // pubspec.yaml and is not installed on Windows, so declaring it
+         // forces a fallback font with synthesized (fuzzy) bold weights.
+         // Omitting it uses each platform's crisp native font.
          textTheme: const TextTheme(
            headlineLarge: TextStyle(fontWeight: FontWeight.w800, letterSpacing: -.5),
            headlineMedium: TextStyle(fontWeight: FontWeight.w800, letterSpacing: -.4),
@@ -101,7 +104,11 @@ class Urban7App extends StatelessWidget {
            brightness: Brightness.dark,
          ),
        ),
-       themeMode: ThemeMode.system,
+       // Force the light theme: this POS is designed light-only, and with
+       // ThemeMode.system the app turns dark on Windows machines that use
+       // dark mode, which makes buttons/nav labels look washed out and
+       // typed text appear grey instead of black.
+       themeMode: ThemeMode.light,
        initialRoute: '/welcome',
       navigatorObservers: [routeObserver],
       routes: {

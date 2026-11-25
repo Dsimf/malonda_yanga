@@ -365,4 +365,14 @@ InputDecoration shopFieldDecoration(String label, {IconData? icon}) =>
       prefixIcon: icon == null
           ? null
           : Icon(icon, size: 19, color: ShopColors.primary),
+      labelStyle: const TextStyle(
+        color: ShopColors.text,
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+      ),
+      floatingLabelStyle: const TextStyle(
+        color: ShopColors.primary,
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+      ),
     );
