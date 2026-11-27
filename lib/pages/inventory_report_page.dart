@@ -556,6 +556,10 @@ class _HeroCard extends StatelessWidget {
                     ? Image.network(
                         imageUrl,
                         fit: BoxFit.cover,
+                        width: 112,
+                        height: 128,
+                        cacheWidth: 224,
+                        cacheHeight: 256,
                         errorBuilder: (context, error, stackTrace) => const Icon(
                           Icons.inventory_2_outlined,
                           color: ShopColors.muted,

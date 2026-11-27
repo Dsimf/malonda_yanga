@@ -31,8 +31,9 @@ class _InventoryPageState extends State<InventoryPage> with RouteAware {
   /// Main categories currently expanded in the grouped (All Items) view.
   final Set<String> _expanded = {};
 
-  String _mainCategoryOf(_Product product) =>
-      product.category.trim().isEmpty ? 'Uncategorized' : product.category.trim();
+  String _mainCategoryOf(_Product product) => product.category.trim().isEmpty
+      ? 'Uncategorized'
+      : product.category.trim();
 
   List<String> get _mainCategories {
     final categories = _products.map(_mainCategoryOf).toSet().toList();
@@ -168,52 +169,52 @@ class _InventoryPageState extends State<InventoryPage> with RouteAware {
                 ),
               ]
             : lowStock
-                .map(
-                  (product) => Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: ShopColors.pale,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.inventory_2_rounded,
-                          color: ShopColors.orange,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                product['name'] as String,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: ShopColors.text,
-                                ),
-                              ),
-                              Text(
-                                'SKU: ${product['sku']} · Stock: ${product['quantity']}',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: ShopColors.muted,
-                                ),
-                              ),
-                            ],
+                  .map(
+                    (product) => Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: ShopColors.pale,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.inventory_2_rounded,
+                            color: ShopColors.orange,
+                            size: 18,
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  product['name'] as String,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: ShopColors.text,
+                                  ),
+                                ),
+                                Text(
+                                  'SKU: ${product['sku']} · Stock: ${product['quantity']}',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: ShopColors.muted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                )
-                .toList(),
+                  )
+                  .toList(),
       );
     } on ApiException catch (error) {
       if (mounted) showShopMessage(context, error.message);
@@ -377,7 +378,9 @@ class _InventoryPageState extends State<InventoryPage> with RouteAware {
                         separatorBuilder: (context, index) =>
                             const SizedBox(width: 6),
                         itemBuilder: (context, index) {
-                          final sub = index == 0 ? 'All' : subCategories[index - 1];
+                          final sub = index == 0
+                              ? 'All'
+                              : subCategories[index - 1];
                           final selected = sub == _subCategory;
                           return ChoiceChip(
                             label: Text(sub),
@@ -502,8 +505,7 @@ class _InventoryPageState extends State<InventoryPage> with RouteAware {
                       ),
                     const SizedBox(height: 20),
                     addProductButton,
-                  ]
-                  else if (filteredProducts.isEmpty)
+                  ] else if (filteredProducts.isEmpty)
                     _EmptyInventory(
                       onReset: () {
                         _searchController.clear();
@@ -538,10 +540,8 @@ class _InventoryPageState extends State<InventoryPage> with RouteAware {
                           '/inventory/report',
                           arguments: filteredProducts[index].reportArguments,
                         ),
-                        onEdit: () =>
-                            _editProduct(filteredProducts[index]),
-                        onDelete: () =>
-                            _deleteProduct(filteredProducts[index]),
+                        onEdit: () => _editProduct(filteredProducts[index]),
+                        onDelete: () => _deleteProduct(filteredProducts[index]),
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -600,7 +600,11 @@ class _CategorySection extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(15),
         boxShadow: const [
-          BoxShadow(color: Color(0x0A192033), blurRadius: 5, offset: Offset(0, 2)),
+          BoxShadow(
+            color: Color(0x0A192033),
+            blurRadius: 5,
+            offset: Offset(0, 2),
+          ),
         ],
       ),
       child: Column(
@@ -980,19 +984,19 @@ class _Product {
   /// Everything the inventory report page needs to render instantly from
   /// route arguments, without a network round-trip.
   Map<String, dynamic> get reportArguments => {
-        'id': id,
-        'name': name,
-        'category': category,
-        'sub_category': subCategory,
-        'sku': sku,
-        'size': size,
-        'color': color,
-        'cost': cost,
-        'price': price,
-        'quantity': stock,
-        'image_url': imageUrl,
-        'supplier_name': supplierName,
-      };
+    'id': id,
+    'name': name,
+    'category': category,
+    'sub_category': subCategory,
+    'sku': sku,
+    'size': size,
+    'color': color,
+    'cost': cost,
+    'price': price,
+    'quantity': stock,
+    'image_url': imageUrl,
+    'supplier_name': supplierName,
+  };
   final String category;
   final String subCategory;
   final String sku;
@@ -1035,39 +1039,42 @@ class _ProductCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: product.tint,
-                  borderRadius: BorderRadius.circular(9),
-                ),
+            // Fixed-height image area. The previous `Expanded` here sat
+            // inside a Stack whose children were Positioned — meaning this
+            // Column received an unbounded height and Expanded grew to the
+            // photo's intrinsic height (often thousands of px), which
+            // stalled layout every time the card was built (tap = freeze).
+            // A fixed height keeps layout O(1) regardless of photo size.
+            Container(
+              height: 118,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: product.tint,
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(9),
                 child: Stack(
                   children: [
-                    Center(
-                      child: product.imageUrl.isNotEmpty
-                          ? Image.network(
-                              product.imageUrl,
-                              // Show the whole photo: the image lives in a
-                              // fixed-size grid cell, so contain cannot
-                              // trigger a layout loop the way a Wrap with
-                              // content-sized children did.
-                              fit: BoxFit.contain,
-                              width: double.infinity,
-                              height: double.infinity,
-                              errorBuilder: (context, error, stackTrace) =>
-                                  Icon(
-                                    product.icon,
-                                    size: 76,
-                                    color: product.productColor,
-                                  ),
-                            )
-                          : Icon(
+                    product.imageUrl.isNotEmpty
+                        ? Image.network(
+                            product.imageUrl,
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            height: double.infinity,
+                            cacheWidth: 240,
+                            cacheHeight: 240,
+                            errorBuilder: (context, error, stackTrace) => Icon(
                               product.icon,
                               size: 76,
                               color: product.productColor,
                             ),
-                    ),
+                          )
+                        : Icon(
+                            product.icon,
+                            size: 76,
+                            color: product.productColor,
+                          ),
                     Positioned(
                       top: 7,
                       right: 7,
@@ -1378,9 +1385,15 @@ class _EditProductDialogState extends State<_EditProductDialog> {
   late final _sku = TextEditingController(text: widget.product.sku);
   late final _size = TextEditingController(text: widget.product.size);
   late final _color = TextEditingController(text: widget.product.color);
-  late final _cost = TextEditingController(text: widget.product.cost.toString());
-  late final _price = TextEditingController(text: widget.product.price.toString());
-  late final _stock = TextEditingController(text: widget.product.stock.toString());
+  late final _cost = TextEditingController(
+    text: widget.product.cost.toString(),
+  );
+  late final _price = TextEditingController(
+    text: widget.product.price.toString(),
+  );
+  late final _stock = TextEditingController(
+    text: widget.product.stock.toString(),
+  );
   late final _supplier = TextEditingController(
     text: widget.product.supplierName,
   );
@@ -1568,15 +1581,12 @@ class _EditProductDialogState extends State<_EditProductDialog> {
                                         product.imageUrl,
                                         fit: BoxFit.cover,
                                         errorBuilder:
-                                            (
-                                              context,
-                                              error,
-                                              stackTrace,
-                                            ) => const Icon(
-                                              Icons.add_a_photo_outlined,
-                                              size: 36,
-                                              color: Color(0xFF777A89),
-                                            ),
+                                            (context, error, stackTrace) =>
+                                                const Icon(
+                                                  Icons.add_a_photo_outlined,
+                                                  size: 36,
+                                                  color: Color(0xFF777A89),
+                                                ),
                                       )
                                     : const Icon(
                                         Icons.add_a_photo_outlined,
@@ -1639,9 +1649,7 @@ class _EditProductDialogState extends State<_EditProductDialog> {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: _field(_cost, 'Cost', number: true),
-                          ),
+                          Expanded(child: _field(_cost, 'Cost', number: true)),
                           const SizedBox(width: 9),
                           Expanded(
                             child: _field(_price, 'Retail price', number: true),
