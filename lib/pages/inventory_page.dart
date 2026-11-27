@@ -499,20 +499,34 @@ class _InventoryPageState extends State<InventoryPage> with RouteAware {
                       },
                     )
                   else ...[
-                    _ProductGrid(
-                      products: filteredProducts,
-                      onTap: (product) => Navigator.pushNamed(
-                        context,
-                        '/sales',
-                        arguments: product.id,
+                    GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: filteredProducts.length,
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            mainAxisSpacing: 10,
+                            crossAxisSpacing: 10,
+                            childAspectRatio: .8,
+                          ),
+                      itemBuilder: (context, index) => _ProductCard(
+                        product: filteredProducts[index],
+                        onTap: () => Navigator.pushNamed(
+                          context,
+                          '/sales',
+                          arguments: filteredProducts[index].id,
+                        ),
+                        onOpen: () => Navigator.pushNamed(
+                          context,
+                          '/inventory/report',
+                          arguments: filteredProducts[index].id,
+                        ),
+                        onEdit: () =>
+                            _editProduct(filteredProducts[index]),
+                        onDelete: () =>
+                            _deleteProduct(filteredProducts[index]),
                       ),
-                      onOpen: (product) => Navigator.pushNamed(
-                        context,
-                        '/inventory/report',
-                        arguments: product.id,
-                      ),
-                      onEdit: _editProduct,
-                      onDelete: _deleteProduct,
                     ),
                     const SizedBox(height: 20),
                     addProductButton,
@@ -650,12 +664,27 @@ class _CategorySection extends StatelessWidget {
                         (sum, p) => sum + p.stock,
                       ),
                     ),
-                    _ProductGrid(
-                      products: grouped[sub]!,
-                      onTap: onTapProduct,
-                      onOpen: onOpenProduct,
-                      onEdit: onEditProduct,
-                      onDelete: onDeleteProduct,
+                    GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: grouped[sub]!.length,
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            mainAxisSpacing: 10,
+                            crossAxisSpacing: 10,
+                            childAspectRatio: .8,
+                          ),
+                      itemBuilder: (context, index) {
+                        final product = grouped[sub]![index];
+                        return _ProductCard(
+                          product: product,
+                          onTap: () => onTapProduct(product),
+                          onOpen: () => onOpenProduct(product),
+                          onEdit: () => onEditProduct(product),
+                          onDelete: () => onDeleteProduct(product),
+                        );
+                      },
                     ),
                     const SizedBox(height: 6),
                   ],
@@ -946,46 +975,6 @@ class _Product {
   final Color productColor;
 }
 
-class _ProductGrid extends StatelessWidget {
-  const _ProductGrid({
-    required this.products,
-    required this.onTap,
-    required this.onOpen,
-    required this.onEdit,
-    required this.onDelete,
-  });
-
-  final List<_Product> products;
-  final ValueChanged<_Product> onTap;
-  final ValueChanged<_Product> onOpen;
-  final ValueChanged<_Product> onEdit;
-  final ValueChanged<_Product> onDelete;
-
-  @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final cardWidth = (constraints.maxWidth - 10) / 2;
-      return Wrap(
-        spacing: 10,
-        runSpacing: 10,
-        children: [
-          for (final product in products)
-            SizedBox(
-              width: cardWidth,
-              child: _ProductCard(
-                product: product,
-                onTap: () => onTap(product),
-                onOpen: () => onOpen(product),
-                onEdit: () => onEdit(product),
-                onDelete: () => onDelete(product),
-              ),
-            ),
-        ],
-      );
-    },
-  );
-}
-
 class _ProductCard extends StatelessWidget {
   const _ProductCard({
     required this.product,
@@ -1013,53 +1002,53 @@ class _ProductCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(9),
-              child: Stack(
-                children: [
-                  if (product.imageUrl.isNotEmpty)
-                    Image.network(
-                      product.imageUrl,
-                      fit: BoxFit.fitWidth,
-                      width: double.infinity,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        height: 130,
-                        color: product.tint,
-                        child: Icon(
-                          product.icon,
-                          size: 76,
-                          color: product.productColor,
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: product.tint,
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Stack(
+                  children: [
+                    Center(
+                      child: product.imageUrl.isNotEmpty
+                          ? Image.network(
+                              product.imageUrl,
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              height: double.infinity,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  Icon(
+                                    product.icon,
+                                    size: 76,
+                                    color: product.productColor,
+                                  ),
+                            )
+                          : Icon(
+                              product.icon,
+                              size: 76,
+                              color: product.productColor,
+                            ),
+                    ),
+                    Positioned(
+                      top: 7,
+                      right: 7,
+                      child: Container(
+                        padding: const EdgeInsets.all(5),
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.sell_outlined,
+                          size: 14,
+                          color: Color(0xFF777A89),
                         ),
                       ),
-                    )
-                  else
-                    Container(
-                      height: 130,
-                      width: double.infinity,
-                      color: product.tint,
-                      child: Icon(
-                        product.icon,
-                        size: 76,
-                        color: product.productColor,
-                      ),
                     ),
-                  Positioned(
-                    top: 7,
-                    right: 7,
-                    child: Container(
-                      padding: const EdgeInsets.all(5),
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.sell_outlined,
-                        size: 14,
-                        color: Color(0xFF777A89),
-                      ),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 8),
