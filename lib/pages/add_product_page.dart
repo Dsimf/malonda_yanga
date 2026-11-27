@@ -292,6 +292,128 @@ child: const Row(
     }
   }
 
+  /// Bottom sheet that lists saved product names and lets the user remove any
+  /// of them.
+  Future<void> _manageNames() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.history_rounded,
+                      color: ShopColors.primary, size: 20),
+                  SizedBox(width: 9),
+                  Text(
+                    'Saved product names',
+                    style: TextStyle(
+                      color: ShopColors.text,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+              const Padding(
+                padding: EdgeInsets.only(top: 4, left: 29),
+                child: Text(
+                  'Tap the bin to remove a product name you added.',
+                  style: TextStyle(color: ShopColors.muted, fontSize: 11),
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (_savedNames.isEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 20,
+                  ),
+                  decoration: BoxDecoration(
+                    color: ShopColors.pale,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.inbox_rounded,
+                          color: Color(0xFF9BA0AE), size: 20),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'No saved product names yet. Add one with the + button on the Product Name field above.',
+                          style: TextStyle(
+                            color: ShopColors.muted,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                Flexible(
+                  child: ListView(
+                    shrinkWrap: true,
+                    padding: EdgeInsets.zero,
+                    children: [
+                      for (final name in _savedNames)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.fromLTRB(14, 4, 4, 4),
+                          decoration: BoxDecoration(
+                            color: ShopColors.pale,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.bookmark_added_rounded,
+                                size: 16,
+                                color: ShopColors.primary,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  name,
+                                  style: const TextStyle(
+                                    color: ShopColors.text,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                visualDensity: VisualDensity.compact,
+                                tooltip: 'Remove $name',
+                                onPressed: () async {
+                                  Navigator.pop(sheetContext);
+                                  await _removeName(name);
+                                },
+                                icon: const Icon(
+                                  Icons.delete_outline_rounded,
+                                  size: 20,
+                                  color: ShopColors.red,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              SizedBox(height: MediaQuery.viewPaddingOf(sheetContext).bottom),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   double get _margin {
     final cost = _parseAmount(_costController.text) ?? 0;
     final price = _parseAmount(_priceController.text) ?? 0;
@@ -505,6 +627,7 @@ child: const Row(
                   onManageCategories: _manageCategories,
                   onNameSaved: _rememberName,
                   onNameRemoved: _removeName,
+                  onManageNames: _manageNames,
                   onSizeSelected: (value) =>
                       setState(() => _selectedSize = value),
                   onColorSelected: (value) =>
@@ -884,6 +1007,7 @@ class _ProductForm extends StatelessWidget {
     required this.onManageCategories,
     required this.onNameSaved,
     required this.onNameRemoved,
+    required this.onManageNames,
     required this.onSizeSelected,
     required this.onColorSelected,
     required this.onColorRemoved,
@@ -922,6 +1046,7 @@ class _ProductForm extends StatelessWidget {
   final VoidCallback onManageCategories;
   final ValueChanged<String> onNameSaved;
   final ValueChanged<String> onNameRemoved;
+  final VoidCallback onManageNames;
   final ValueChanged<String> onSizeSelected;
   final ValueChanged<String> onColorSelected;
   final ValueChanged<String> onColorRemoved;
@@ -948,7 +1073,7 @@ class _ProductForm extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _FieldHeading(
-          title: 'Category',
+          title: 'Main Category',
           required: true,
           trailing: 'Manage',
           trailingColor: ShopColors.primary,
@@ -1064,7 +1189,9 @@ fieldViewBuilder:
         _FieldHeading(
           title: 'Product Name',
           required: true,
-          trailing: 'English / Bemba',
+          trailing: 'Manage',
+          trailingColor: ShopColors.primary,
+          onTrailingTap: onManageNames,
         ),
         const SizedBox(height: 6),
         _ProductNameField(
@@ -1073,83 +1200,6 @@ fieldViewBuilder:
           savedNames: savedNames,
           onNameCommitted: onNameSaved,
           onNameRemoved: onNameRemoved,
-        ),
-        const SizedBox(height: 13),
-        Autocomplete<String>(
-          initialValue: TextEditingValue(text: category),
-          optionsBuilder: (value) {
-            final query = value.text.trim().toLowerCase();
-            if (query.isEmpty) return const Iterable<String>.empty();
-            return categories.where(
-              (item) => item.toLowerCase().contains(query),
-            );
-          },
-          fieldViewBuilder:
-              (
-                context,
-                textController,
-                focusNode,
-                onFieldSubmitted,
-              ) => TextField(
-                controller: textController,
-                focusNode: focusNode,
-                textCapitalization: TextCapitalization.words,
-                onChanged: (value) => onCategoryChanged(value.trim()),
-                decoration: _formDecoration(
-                  prefixIcon: const Icon(
-                    Icons.checkroom_outlined,
-                    color: ShopColors.primary,
-                    size: 21,
-                  ),
-                  hintText: 'Type a category name e.g. Sneakers',
-                ).copyWith(
-                  suffixIcon: IconButton(
-                    padding: EdgeInsets.zero,
-                    visualDensity: VisualDensity.compact,
-                    tooltip: 'Save this category',
-                    onPressed: () {
-                      final name = textController.text.trim();
-                      if (name.isEmpty) {
-                        showShopMessage(context, 'Type a category name first.');
-                        return;
-                      }
-                      onAddCategory();
-                    },
-                    icon: const Icon(
-                      Icons.add_circle_outline_rounded,
-                      color: ShopColors.primary,
-                      size: 21,
-                    ),
-                  ),
-                ),
-              ),
-          optionsViewBuilder: (context, onSelected, options) => Align(
-            alignment: Alignment.topLeft,
-            child: Material(
-              elevation: 6,
-              borderRadius: BorderRadius.circular(12),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 220, maxWidth: 340),
-                child: ListView(
-                  shrinkWrap: true,
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  children: [
-                    for (final option in options)
-                      ListTile(
-                        dense: true,
-                        leading: const Icon(
-                          Icons.bookmark_added_rounded,
-                          size: 15,
-                          color: ShopColors.primary,
-                        ),
-                        title: Text(option),
-                        onTap: () => onSelected(option),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ),
         ),
         const SizedBox(height: 12),
         _FieldHeading(title: 'Supplier'),
