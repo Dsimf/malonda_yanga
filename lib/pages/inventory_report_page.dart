@@ -18,15 +18,23 @@ class _InventoryReportPageState extends State<InventoryReportPage> {
   bool _loading = true;
   String? _errorMessage;
   String? _productId;
+  bool _started = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
     final arguments = ModalRoute.of(context)?.settings.arguments;
     if (arguments is String && arguments.isNotEmpty) {
       _productId = arguments;
     }
-    _load();
+    // Defer the first load until after the build phase so we never call
+    // setState() from within didChangeDependencies (which caused a rebuild
+    // loop / freeze).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _load();
+    });
   }
 
   Future<void> _load() async {
