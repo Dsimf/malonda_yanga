@@ -30,8 +30,10 @@ class _AddProductPageState extends State<AddProductPage> {
   final _priceController = TextEditingController();
   final _skuController = TextEditingController();
   final _supplierController = TextEditingController();
+  final _subCategoryController = TextEditingController();
   XFile? _productPhoto;
   String _category = '';
+  String _subCategory = '';
   String _supplierName = '';
   List<Map<String, dynamic>> _suppliers = [];
   String _selectedSize = 'M';
@@ -88,6 +90,7 @@ class _AddProductPageState extends State<AddProductPage> {
     _priceController.dispose();
     _skuController.dispose();
     _supplierController.dispose();
+    _subCategoryController.dispose();
     super.dispose();
   }
 
@@ -181,22 +184,22 @@ class _AddProductPageState extends State<AddProductPage> {
                     color: ShopColors.pale,
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.inbox_rounded,
-                          color: Color(0xFF9BA0AE), size: 20),
-                      SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'No saved categories yet. Add one with the + button on the Category field.',
-                          style: TextStyle(
-                            color: ShopColors.muted,
-                            fontSize: 12,
+child: const Row(
+                      children: [
+                        Icon(Icons.inbox_rounded,
+                            color: Color(0xFF9BA0AE), size: 20),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'No saved categories yet. Add one with the + button on the Category field above.',
+                            style: TextStyle(
+                              color: ShopColors.muted,
+                              fontSize: 12,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
                 )
               else
                 Flexible(
@@ -275,6 +278,17 @@ class _AddProductPageState extends State<AddProductPage> {
     await prefs.setStringList(_kSavedCategories, _savedCategories);
     if (mounted) {
       showShopMessage(context, 'Removed "$category".');
+    }
+  }
+
+  Future<void> _removeName(String name) async {
+    setState(() {
+      _savedNames = _savedNames.where((n) => n != name).toList();
+    });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_kSavedNames, _savedNames);
+    if (mounted) {
+      showShopMessage(context, 'Removed "$name".');
     }
   }
 
@@ -371,6 +385,7 @@ class _AddProductPageState extends State<AddProductPage> {
       final product = await ApiClient.createProduct({
         'name': name,
         'category': _category,
+        'sub_category': _subCategory,
         'sku': sku,
         'size': _selectedSize,
         'color': _selectedColor,
@@ -451,6 +466,8 @@ class _AddProductPageState extends State<AddProductPage> {
                   priceController: _priceController,
                   skuController: _skuController,
                   category: _category,
+                  subCategory: _subCategory,
+                  subCategoryController: _subCategoryController,
                   categories: _savedCategories,
                   supplierName: _supplierName,
                   supplierController: _supplierController,
@@ -468,6 +485,8 @@ class _AddProductPageState extends State<AddProductPage> {
                   marginPercent: _marginPercent,
                   onCategoryChanged: (value) =>
                       setState(() => _category = value),
+                  onSubCategoryChanged: (value) =>
+                      setState(() => _subCategory = value),
                   onAddCategory: () async {
                     final typed = _category.trim();
                     if (typed.isEmpty) {
@@ -482,8 +501,10 @@ class _AddProductPageState extends State<AddProductPage> {
                     if (!context.mounted) return;
                     showShopMessage(context, 'Category "$typed" saved.');
                   },
+                  onCategoryRemoved: _removeCategory,
                   onManageCategories: _manageCategories,
                   onNameSaved: _rememberName,
+                  onNameRemoved: _removeName,
                   onSizeSelected: (value) =>
                       setState(() => _selectedSize = value),
                   onColorSelected: (value) =>
@@ -840,6 +861,8 @@ class _ProductForm extends StatelessWidget {
     required this.priceController,
     required this.skuController,
     required this.category,
+    required this.subCategory,
+    required this.subCategoryController,
     required this.categories,
     required this.supplierName,
     required this.supplierController,
@@ -855,9 +878,12 @@ class _ProductForm extends StatelessWidget {
     required this.margin,
     required this.marginPercent,
     required this.onCategoryChanged,
+    required this.onSubCategoryChanged,
     required this.onAddCategory,
+    required this.onCategoryRemoved,
     required this.onManageCategories,
     required this.onNameSaved,
+    required this.onNameRemoved,
     required this.onSizeSelected,
     required this.onColorSelected,
     required this.onColorRemoved,
@@ -873,6 +899,8 @@ class _ProductForm extends StatelessWidget {
   final TextEditingController priceController;
   final TextEditingController skuController;
   final String category;
+  final String subCategory;
+  final TextEditingController subCategoryController;
   final List<String> categories;
   final String supplierName;
   final TextEditingController supplierController;
@@ -888,9 +916,12 @@ class _ProductForm extends StatelessWidget {
   final double margin;
   final double marginPercent;
   final ValueChanged<String> onCategoryChanged;
+  final ValueChanged<String> onSubCategoryChanged;
   final VoidCallback onAddCategory;
+  final ValueChanged<String> onCategoryRemoved;
   final VoidCallback onManageCategories;
   final ValueChanged<String> onNameSaved;
+  final ValueChanged<String> onNameRemoved;
   final ValueChanged<String> onSizeSelected;
   final ValueChanged<String> onColorSelected;
   final ValueChanged<String> onColorRemoved;
@@ -917,6 +948,120 @@ class _ProductForm extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _FieldHeading(
+          title: 'Category',
+          required: true,
+          trailing: 'Manage',
+          trailingColor: ShopColors.primary,
+          onTrailingTap: onManageCategories,
+        ),
+        const SizedBox(height: 6),
+        Autocomplete<String>(
+          initialValue: TextEditingValue(text: category),
+          optionsBuilder: (value) {
+            final query = value.text.trim().toLowerCase();
+            if (query.isEmpty) return const Iterable<String>.empty();
+            return categories.where(
+              (item) => item.toLowerCase().contains(query),
+            );
+          },
+fieldViewBuilder:
+              (
+                context,
+                textController,
+                focusNode,
+                onFieldSubmitted,
+              ) => TextField(
+                controller: textController,
+                focusNode: focusNode,
+                textCapitalization: TextCapitalization.words,
+                onChanged: (value) => onCategoryChanged(value.trim()),
+                decoration: _formDecoration(
+                  prefixIcon: const Icon(
+                    Icons.checkroom_outlined,
+                    color: ShopColors.primary,
+                    size: 21,
+                  ),
+                  hintText: 'Type a category name e.g. Sneakers',
+                ).copyWith(
+                  suffixIcon: IconButton(
+                    padding: EdgeInsets.zero,
+                    visualDensity: VisualDensity.compact,
+                    tooltip: 'Save this category',
+                    onPressed: () {
+                      final name = textController.text.trim();
+                      if (name.isEmpty) {
+                        showShopMessage(context, 'Type a category name first.');
+                        return;
+                      }
+                      onAddCategory();
+                    },
+                    icon: const Icon(
+                      Icons.add_circle_outline_rounded,
+                      color: ShopColors.primary,
+                      size: 21,
+                    ),
+                  ),
+                ),
+              ),
+          optionsViewBuilder: (context, onSelected, options) => Align(
+            alignment: Alignment.topLeft,
+            child: Material(
+              elevation: 6,
+              borderRadius: BorderRadius.circular(12),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 220, maxWidth: 340),
+                child: ListView(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  children: [
+                    for (final option in options)
+                      ListTile(
+                        dense: true,
+                        leading: const Icon(
+                          Icons.bookmark_added_rounded,
+                          size: 15,
+                          color: ShopColors.primary,
+                        ),
+                        title: Text(option),
+                        trailing: IconButton(
+                          visualDensity: VisualDensity.compact,
+                          tooltip: 'Remove $option',
+                          onPressed: () => onCategoryRemoved(option),
+                          icon: const Icon(
+                            Icons.remove_circle_outline_rounded,
+                            size: 18,
+                            color: ShopColors.red,
+                          ),
+                        ),
+                        onTap: () => onSelected(option),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        _FieldHeading(
+          title: 'Sub Category',
+          required: false,
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: subCategoryController,
+          textCapitalization: TextCapitalization.words,
+          onChanged: (value) => onSubCategoryChanged(value.trim()),
+          decoration: _formDecoration(
+            prefixIcon: const Icon(
+              Icons.subdirectory_arrow_right_rounded,
+              color: ShopColors.primary,
+              size: 21,
+            ),
+            hintText: 'e.g. Running, Casual, Formal',
+          ),
+        ),
+        const SizedBox(height: 13),
+        _FieldHeading(
           title: 'Product Name',
           required: true,
           trailing: 'English / Bemba',
@@ -927,16 +1072,9 @@ class _ProductForm extends StatelessWidget {
           focusNode: nameFocus,
           savedNames: savedNames,
           onNameCommitted: onNameSaved,
+          onNameRemoved: onNameRemoved,
         ),
         const SizedBox(height: 13),
-        _FieldHeading(
-          title: 'Category',
-          required: true,
-          trailing: 'Manage',
-          trailingColor: ShopColors.primary,
-          onTrailingTap: onManageCategories,
-        ),
-        const SizedBox(height: 6),
         Autocomplete<String>(
           initialValue: TextEditingValue(text: category),
           optionsBuilder: (value) {
@@ -1662,12 +1800,14 @@ class _ProductNameField extends StatefulWidget {
     required this.focusNode,
     required this.savedNames,
     required this.onNameCommitted,
+    required this.onNameRemoved,
   });
 
   final TextEditingController controller;
   final FocusNode focusNode;
   final List<String> savedNames;
   final ValueChanged<String> onNameCommitted;
+  final ValueChanged<String> onNameRemoved;
 
   @override
   State<_ProductNameField> createState() => _ProductNameFieldState();
@@ -1738,10 +1878,24 @@ class _ProductNameFieldState extends State<_ProductNameField> {
           setState(() => _suggestions = []);
         },
         decoration: _formDecoration().copyWith(
-          suffixIcon: const Icon(
-            Icons.check_circle_outline_rounded,
-            color: Color(0xFF777A89),
-            size: 20,
+          suffixIcon: IconButton(
+            padding: EdgeInsets.zero,
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Save this product name',
+            onPressed: () {
+              final name = widget.controller.text.trim();
+              if (name.isEmpty) {
+                showShopMessage(context, 'Type a product name first.');
+                return;
+              }
+              widget.onNameCommitted(name);
+              showShopMessage(context, 'Product name "$name" saved.');
+            },
+            icon: const Icon(
+              Icons.add_circle_outline_rounded,
+              color: ShopColors.primary,
+              size: 21,
+            ),
           ),
         ),
       ),
@@ -1784,6 +1938,15 @@ class _ProductNameFieldState extends State<_ProductNameField> {
                               style: const TextStyle(
                                 fontSize: 11,
                                 color: ShopColors.text,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            GestureDetector(
+                              onTap: () => widget.onNameRemoved(name),
+                              child: const Icon(
+                                Icons.remove_circle_outline_rounded,
+                                size: 14,
+                                color: ShopColors.red,
                               ),
                             ),
                           ],
