@@ -128,6 +128,7 @@ class PasswordUpdate(BaseModel):
 class ProductCreate(BaseModel):
     name: str = Field(min_length=1, max_length=160)
     category: str = Field(min_length=1, max_length=100)
+    sub_category: str = Field(default="", max_length=100)
     sku: str = Field(min_length=1, max_length=80)
     size: str = Field(default="", max_length=40)
     color: str = Field(default="", max_length=80)
@@ -142,6 +143,7 @@ class ProductUpdate(BaseModel):
 
     name: str | None = Field(default=None, min_length=1, max_length=160)
     category: str | None = Field(default=None, min_length=1, max_length=100)
+    sub_category: str | None = Field(default=None, max_length=100)
     sku: str | None = Field(default=None, min_length=1, max_length=80)
     size: str | None = Field(default=None, max_length=40)
     color: str | None = Field(default=None, max_length=80)

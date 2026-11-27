@@ -1341,7 +1341,10 @@ fieldViewBuilder:
                             color: ShopColors.red,
                           ),
                         ),
-                        onTap: () => onSelected(option),
+                        onTap: () {
+                          onSelected(option);
+                          onCategoryChanged(option);
+                        },
                       ),
                   ],
                 ),
@@ -1439,7 +1442,10 @@ fieldViewBuilder:
                             color: ShopColors.red,
                           ),
                         ),
-                        onTap: () => onSelected(option),
+                        onTap: () {
+                          onSelected(option);
+                          onSubCategoryChanged(option);
+                        },
                       ),
                   ],
                 ),

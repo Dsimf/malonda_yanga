@@ -5,6 +5,7 @@ import 'pages/employees_page.dart';
 import 'pages/expenses_page.dart';
 import 'pages/home_page.dart';
 import 'pages/inventory_page.dart' show InventoryPage, routeObserver;
+import 'pages/inventory_report_page.dart';
 import 'pages/layby_page.dart';
 import 'pages/landing_page.dart';
 import 'pages/login_page.dart';
@@ -142,6 +143,7 @@ textTheme: TextTheme(
         '/login': (_) => const LoginPage(),
         '/home': (_) => const HomePage(),
         '/inventory': (_) => const InventoryPage(),
+        '/inventory/report': (_) => const InventoryReportPage(),
         '/product/new': (_) => const AddProductPage(),
         '/sales': (_) => const SalesPage(),
         '/laybys': (_) => const LaybyPage(),

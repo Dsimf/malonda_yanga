@@ -44,6 +44,7 @@ create table if not exists public.products (
   shop_id uuid not null references public.shops(id) on delete cascade,
   name text not null,
   category text not null,
+  sub_category text not null default '',
   sku text not null,
   size text not null default '',
   color text not null default '',
@@ -63,6 +64,10 @@ alter table public.products
 
 alter table public.products
   add column if not exists unit_cost numeric(12, 2) not null default 0;
+
+-- Optional sub category grouping within a main category.
+alter table public.products
+  add column if not exists sub_category text not null default '';
 
 create table if not exists public.suppliers (
   id uuid primary key default gen_random_uuid(),

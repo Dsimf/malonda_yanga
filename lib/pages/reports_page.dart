@@ -320,6 +320,8 @@ class _ReportsPageState extends State<ReportsPage> with RouteAware {
                 const SizedBox(height: 11),
                 _ProfitLossCard(report: _report ?? const {}),
                 const SizedBox(height: 11),
+                const _InventorySummaryCard(),
+                const SizedBox(height: 11),
                 _SalesChartCard(days: _dailySales),
                 const SizedBox(height: 11),
                 _SalesLogCard(
@@ -2315,4 +2317,203 @@ class _ReportsNavItem extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Inventory overview shown on the main Reports page. Loads the live product
+/// list and summarises stock levels and stock value. Tapping "View inventory"
+/// opens the full inventory page.
+class _InventorySummaryCard extends StatefulWidget {
+  const _InventorySummaryCard();
+
+  @override
+  State<_InventorySummaryCard> createState() => _InventorySummaryCardState();
+}
+
+class _InventorySummaryCardState extends State<_InventorySummaryCard> {
+  List<Map<String, dynamic>> _products = [];
+  bool _loading = true;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _errorMessage = null;
+    });
+    try {
+      final products = await ApiClient.products();
+      if (!mounted) return;
+      setState(() {
+        _products = products;
+        _loading = false;
+      });
+    } on ApiException catch (error) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = error.message;
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  int _qty(Map<String, dynamic> p) => (p['quantity'] as num?)?.toInt() ?? 0;
+  double _price(Map<String, dynamic> p) =>
+      (p['price'] as num?)?.toDouble() ?? 0;
+  double _cost(Map<String, dynamic> p) =>
+      (p['cost'] as num?)?.toDouble() ?? 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final totalUnits = _products.fold<int>(0, (s, p) => s + _qty(p));
+    final lowStock = _products.where((p) => _qty(p) <= 5).length;
+    final outOfStock = _products.where((p) => _qty(p) <= 0).length;
+    final costValue = _products.fold<double>(
+      0,
+      (s, p) => s + _cost(p) * _qty(p),
+    );
+    final retailValue = _products.fold<double>(
+      0,
+      (s, p) => s + _price(p) * _qty(p),
+    );
+
+    return _ReportCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Inventory Summary',
+                  style: TextStyle(
+                    color: ShopColors.text,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: () => Navigator.pushNamed(context, '/inventory'),
+                icon: const Text(
+                  'View inventory',
+                  style: TextStyle(
+                    color: ShopColors.primary,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                label: const Icon(
+                  Icons.arrow_forward_rounded,
+                  color: ShopColors.primary,
+                  size: 14,
+                ),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          if (_loading)
+            const LinearProgressIndicator()
+          else if (_errorMessage != null)
+            Text(
+              'Could not load inventory: $_errorMessage',
+              style: const TextStyle(color: ShopColors.red, fontSize: 11),
+            )
+          else ...[
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                _InventoryStat(
+                  label: 'Products',
+                  value: '${_products.length}',
+                  color: ShopColors.primary,
+                ),
+                _InventoryStat(
+                  label: 'Units in stock',
+                  value: '$totalUnits',
+                  color: ShopColors.green,
+                ),
+                _InventoryStat(
+                  label: 'Low stock',
+                  value: '$lowStock',
+                  color: ShopColors.orange,
+                ),
+                _InventoryStat(
+                  label: 'Out of stock',
+                  value: '$outOfStock',
+                  color: ShopColors.red,
+                ),
+                _InventoryStat(
+                  label: 'Value at cost',
+                  value: 'K${costValue.toStringAsFixed(0)}',
+                  color: ShopColors.text,
+                ),
+                _InventoryStat(
+                  label: 'Value at retail',
+                  value: 'K${retailValue.toStringAsFixed(0)}',
+                  color: ShopColors.primary,
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _InventoryStat extends StatelessWidget {
+  const _InventoryStat({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 100,
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+    decoration: BoxDecoration(
+      color: ShopColors.pale,
+      borderRadius: BorderRadius.circular(11),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: ShopColors.muted, fontSize: 9),
+        ),
+        const SizedBox(height: 2),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            value,
+            style: TextStyle(
+              color: color,
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 }

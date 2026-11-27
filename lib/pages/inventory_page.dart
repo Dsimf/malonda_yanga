@@ -22,18 +22,37 @@ class _InventoryPageState extends State<InventoryPage> with RouteAware {
   final _searchController = TextEditingController();
   final _searchFocusNode = FocusNode();
   String _category = 'All Items';
+  String _subCategory = 'All';
   String _query = '';
   List<_Product> _products = [];
   bool _loading = true;
   String? _errorMessage;
 
-  static const _categories = [
-    'All Items',
-    'T-Shirts',
-    'Jackets & Hoodies',
-    'Trousers',
-    'Footwear',
-  ];
+  /// Main categories currently expanded in the grouped (All Items) view.
+  final Set<String> _expanded = {};
+
+  String _mainCategoryOf(_Product product) =>
+      product.category.trim().isEmpty ? 'Uncategorized' : product.category.trim();
+
+  List<String> get _mainCategories {
+    final categories = _products.map(_mainCategoryOf).toSet().toList();
+    categories.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return categories;
+  }
+
+  List<String> _subCategoriesFor(String mainCategory) {
+    final subCategories = _products
+        .where(
+          (product) =>
+              _mainCategoryOf(product) == mainCategory &&
+              product.subCategory.trim().isNotEmpty,
+        )
+        .map((product) => product.subCategory.trim())
+        .toSet()
+        .toList();
+    subCategories.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return subCategories;
+  }
 
   @override
   void initState() {
@@ -70,6 +89,10 @@ class _InventoryPageState extends State<InventoryPage> with RouteAware {
       setState(() {
         _products = products.map(_Product.fromJson).toList();
         _loading = false;
+        if (_expanded.isEmpty) {
+          final categories = _mainCategories;
+          if (categories.isNotEmpty) _expanded.add(categories.first);
+        }
       });
     } on ApiException catch (error) {
       if (mounted) {
@@ -199,22 +222,41 @@ class _InventoryPageState extends State<InventoryPage> with RouteAware {
 
   @override
   Widget build(BuildContext context) {
+    final query = _query.trim().toLowerCase();
     final filteredProducts = _products.where((product) {
-      final matchesText = product.name.toLowerCase().contains(
-        _query.toLowerCase(),
-      );
+      final matchesText = product.name.toLowerCase().contains(query);
       final matchesCategory =
-          _category == 'All Items' ||
-          (_category == 'T-Shirts' &&
-              product.category.toLowerCase().contains('t-shirt')) ||
-          (_category == 'Jackets & Hoodies' &&
-              product.category.toLowerCase().contains('hoodie')) ||
-          (_category == 'Trousers' &&
-              product.category.toLowerCase().contains('trouser')) ||
-          (_category == 'Footwear' &&
-              product.category.toLowerCase().contains('footwear'));
-      return matchesText && matchesCategory;
+          _category == 'All Items' || _mainCategoryOf(product) == _category;
+      final matchesSubCategory =
+          _subCategory == 'All' || product.subCategory.trim() == _subCategory;
+      return matchesText && matchesCategory && matchesSubCategory;
     }).toList();
+
+    final mainCategories = _mainCategories;
+    final subCategories = _category == 'All Items'
+        ? <String>[]
+        : _subCategoriesFor(_category);
+    final groupedView = _category == 'All Items' && query.isEmpty;
+    final addProductButton = SizedBox(
+      height: 55,
+      child: FilledButton.icon(
+        onPressed: () => Navigator.pushNamed(context, '/product/new'),
+        icon: const Icon(Icons.add_rounded, size: 25),
+        label: const Text(
+          'Add Product',
+          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+        ),
+        style: FilledButton.styleFrom(
+          backgroundColor: const Color(0xFF194AA2),
+          foregroundColor: Colors.white,
+          elevation: 3,
+          shadowColor: ShopColors.primary.withValues(alpha: .25),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      ),
+    );
 
     return Scaffold(
       backgroundColor: ShopColors.surface,
@@ -290,11 +332,13 @@ class _InventoryPageState extends State<InventoryPage> with RouteAware {
                     child: ListView.separated(
                       padding: EdgeInsets.zero,
                       scrollDirection: Axis.horizontal,
-                      itemCount: _categories.length,
+                      itemCount: mainCategories.length + 1,
                       separatorBuilder: (context, index) =>
                           const SizedBox(width: 6),
                       itemBuilder: (context, index) {
-                        final category = _categories[index];
+                        final category = index == 0
+                            ? 'All Items'
+                            : mainCategories[index - 1];
                         final selected = category == _category;
                         final label = category == 'All Items'
                             ? 'All Items (${_products.length})'
@@ -302,8 +346,10 @@ class _InventoryPageState extends State<InventoryPage> with RouteAware {
                         return ChoiceChip(
                           label: Text(label),
                           selected: selected,
-                          onSelected: (_) =>
-                              setState(() => _category = category),
+                          onSelected: (_) => setState(() {
+                            _category = category;
+                            _subCategory = 'All';
+                          }),
                           selectedColor: const Color(0xFF194AA2),
                           backgroundColor: Colors.white,
                           side: BorderSide.none,
@@ -320,6 +366,43 @@ class _InventoryPageState extends State<InventoryPage> with RouteAware {
                       },
                     ),
                   ),
+                  if (subCategories.isNotEmpty) ...[
+                    const SizedBox(height: 9),
+                    SizedBox(
+                      height: 34,
+                      child: ListView.separated(
+                        padding: EdgeInsets.zero,
+                        scrollDirection: Axis.horizontal,
+                        itemCount: subCategories.length + 1,
+                        separatorBuilder: (context, index) =>
+                            const SizedBox(width: 6),
+                        itemBuilder: (context, index) {
+                          final sub = index == 0 ? 'All' : subCategories[index - 1];
+                          final selected = sub == _subCategory;
+                          return ChoiceChip(
+                            label: Text(sub),
+                            selected: selected,
+                            onSelected: (_) =>
+                                setState(() => _subCategory = sub),
+                            selectedColor: const Color(0xFF45D9A2),
+                            backgroundColor: Colors.white,
+                            side: BorderSide.none,
+                            elevation: selected ? 1 : 0,
+                            labelStyle: TextStyle(
+                              color: selected
+                                  ? const Color(0xFF005539)
+                                  : ShopColors.text,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(25),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 15),
                   Row(
                     children: [
@@ -362,6 +445,48 @@ class _InventoryPageState extends State<InventoryPage> with RouteAware {
                       message: _errorMessage!,
                       onRetry: _loadProducts,
                     )
+                  else if (groupedView && mainCategories.isEmpty)
+                    _EmptyInventory(
+                      onReset: () {
+                        _searchController.clear();
+                        setState(() {
+                          _query = '';
+                          _category = 'All Items';
+                          _subCategory = 'All';
+                        });
+                      },
+                    )
+                  else if (groupedView) ...[
+                    for (final main in mainCategories)
+                      _CategorySection(
+                        title: main,
+                        products: _products
+                            .where((p) => _mainCategoryOf(p) == main)
+                            .toList(),
+                        expanded: _expanded.contains(main),
+                        onToggle: () => setState(() {
+                          if (_expanded.contains(main)) {
+                            _expanded.remove(main);
+                          } else {
+                            _expanded.add(main);
+                          }
+                        }),
+                        onTapProduct: (product) => Navigator.pushNamed(
+                          context,
+                          '/sales',
+                          arguments: product.id,
+                        ),
+                        onOpenProduct: (product) => Navigator.pushNamed(
+                          context,
+                          '/inventory/report',
+                          arguments: product.id,
+                        ),
+                        onEditProduct: _editProduct,
+                        onDeleteProduct: _deleteProduct,
+                      ),
+                    const SizedBox(height: 20),
+                    addProductButton,
+                  ]
                   else if (filteredProducts.isEmpty)
                     _EmptyInventory(
                       onReset: () {
@@ -369,6 +494,7 @@ class _InventoryPageState extends State<InventoryPage> with RouteAware {
                         setState(() {
                           _query = '';
                           _category = 'All Items';
+                          _subCategory = 'All';
                         });
                       },
                     )
@@ -382,13 +508,18 @@ class _InventoryPageState extends State<InventoryPage> with RouteAware {
                             crossAxisCount: 2,
                             mainAxisSpacing: 10,
                             crossAxisSpacing: 10,
-                            childAspectRatio: .72,
+                            childAspectRatio: .9,
                           ),
                       itemBuilder: (context, index) => _ProductCard(
                         product: filteredProducts[index],
                         onTap: () => Navigator.pushNamed(
                           context,
                           '/sales',
+                          arguments: filteredProducts[index].id,
+                        ),
+                        onOpen: () => Navigator.pushNamed(
+                          context,
+                          '/inventory/report',
                           arguments: filteredProducts[index].id,
                         ),
                         onEdit: () =>
@@ -398,32 +529,7 @@ class _InventoryPageState extends State<InventoryPage> with RouteAware {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    SizedBox(
-                      height: 55,
-                      child: FilledButton.icon(
-                        onPressed: () =>
-                            Navigator.pushNamed(context, '/product/new'),
-                        icon: const Icon(Icons.add_rounded, size: 25),
-                        label: const Text(
-                          'Add Product',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 16,
-                          ),
-                        ),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF194AA2),
-                          foregroundColor: Colors.white,
-                          elevation: 3,
-                          shadowColor: ShopColors.primary.withValues(
-                            alpha: .25,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                      ),
-                    ),
+                    addProductButton,
                   ],
                 ],
               ),
@@ -434,6 +540,216 @@ class _InventoryPageState extends State<InventoryPage> with RouteAware {
       bottomNavigationBar: const _InventoryBottomNavigation(),
     );
   }
+}
+
+class _CategorySection extends StatelessWidget {
+  const _CategorySection({
+    required this.title,
+    required this.products,
+    required this.expanded,
+    required this.onToggle,
+    required this.onTapProduct,
+    required this.onOpenProduct,
+    required this.onEditProduct,
+    required this.onDeleteProduct,
+  });
+
+  final String title;
+  final List<_Product> products;
+  final bool expanded;
+  final VoidCallback onToggle;
+  final ValueChanged<_Product> onTapProduct;
+  final ValueChanged<_Product> onOpenProduct;
+  final ValueChanged<_Product> onEditProduct;
+  final ValueChanged<_Product> onDeleteProduct;
+
+  @override
+  Widget build(BuildContext context) {
+    final totalStock = products.fold<int>(0, (sum, p) => sum + p.stock);
+
+    // Group this main category's products by sub category (empty -> "No sub category").
+    final grouped = <String, List<_Product>>{};
+    for (final product in products) {
+      final sub = product.subCategory.trim().isEmpty
+          ? 'No sub category'
+          : product.subCategory.trim();
+      grouped.putIfAbsent(sub, () => []).add(product);
+    }
+    final subNames = grouped.keys.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: const [
+          BoxShadow(color: Color(0x0A192033), blurRadius: 5, offset: Offset(0, 2)),
+        ],
+      ),
+      child: Column(
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(15),
+            onTap: onToggle,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+              child: Row(
+                children: [
+                  Container(
+                    height: 38,
+                    width: 38,
+                    decoration: BoxDecoration(
+                      color: ShopColors.primary.withValues(alpha: .1),
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                    child: const Icon(
+                      Icons.category_outlined,
+                      color: ShopColors.primary,
+                      size: 19,
+                    ),
+                  ),
+                  const SizedBox(width: 11),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: ShopColors.text,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${products.length} product${products.length == 1 ? '' : 's'} · ${subNames.length} sub categor${subNames.length == 1 ? 'y' : 'ies'} · $totalStock in stock',
+                          style: const TextStyle(
+                            color: ShopColors.muted,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  AnimatedRotation(
+                    turns: expanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 180),
+                    child: const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: ShopColors.muted,
+                      size: 26,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (expanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final sub in subNames) ...[
+                    _SubCategoryHeader(
+                      title: sub,
+                      count: grouped[sub]!.length,
+                      stock: grouped[sub]!.fold<int>(
+                        0,
+                        (sum, p) => sum + p.stock,
+                      ),
+                    ),
+                    GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: grouped[sub]!.length,
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            mainAxisSpacing: 10,
+                            crossAxisSpacing: 10,
+                            childAspectRatio: .9,
+                          ),
+                      itemBuilder: (context, index) {
+                        final product = grouped[sub]![index];
+                        return _ProductCard(
+                          product: product,
+                          onTap: () => onTapProduct(product),
+                          onOpen: () => onOpenProduct(product),
+                          onEdit: () => onEditProduct(product),
+                          onDelete: () => onDeleteProduct(product),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 6),
+                  ],
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SubCategoryHeader extends StatelessWidget {
+  const _SubCategoryHeader({
+    required this.title,
+    required this.count,
+    required this.stock,
+  });
+
+  final String title;
+  final int count;
+  final int stock;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(2, 6, 2, 8),
+    child: Row(
+      children: [
+        const Icon(
+          Icons.subdirectory_arrow_right_rounded,
+          color: ShopColors.primary,
+          size: 16,
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: ShopColors.text,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: ShopColors.pale,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            '$count · $stock in stock',
+            style: const TextStyle(
+              color: ShopColors.muted,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _InventoryAppBar extends StatelessWidget {
@@ -595,6 +911,7 @@ class _Product {
   const _Product({
     required this.name,
     required this.category,
+    required this.subCategory,
     required this.price,
     required this.stock,
     required this.icon,
@@ -620,6 +937,7 @@ class _Product {
       id: json['id'] as String,
       name: json['name'] as String,
       category: category,
+      subCategory: json['sub_category'] as String? ?? '',
       sku: json['sku'] as String? ?? '',
       size: json['size'] as String? ?? '',
       color: json['color'] as String? ?? '',
@@ -643,6 +961,7 @@ class _Product {
   final String id;
   final String name;
   final String category;
+  final String subCategory;
   final String sku;
   final String size;
   final String color;
@@ -660,12 +979,14 @@ class _ProductCard extends StatelessWidget {
   const _ProductCard({
     required this.product,
     required this.onTap,
+    required this.onOpen,
     required this.onEdit,
     required this.onDelete,
   });
 
   final _Product product;
   final VoidCallback onTap;
+  final VoidCallback onOpen;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
@@ -675,7 +996,7 @@ class _ProductCard extends StatelessWidget {
     borderRadius: BorderRadius.circular(15),
     child: InkWell(
       borderRadius: BorderRadius.circular(15),
-      onTap: onTap,
+      onTap: onOpen,
       child: Padding(
         padding: const EdgeInsets.all(9),
         child: Column(
@@ -694,7 +1015,7 @@ class _ProductCard extends StatelessWidget {
                       child: product.imageUrl.isNotEmpty
                           ? Image.network(
                               product.imageUrl,
-                              fit: BoxFit.cover,
+                              fit: BoxFit.contain,
                               width: double.infinity,
                               height: double.infinity,
                               errorBuilder: (context, error, stackTrace) =>
@@ -742,6 +1063,20 @@ class _ProductCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 2),
+            if (product.subCategory.trim().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Text(
+                  product.subCategory.trim(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: ShopColors.muted,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
             Text(
               'K${product.price.toStringAsFixed(0)}',
               style: const TextStyle(
@@ -767,21 +1102,25 @@ class _ProductCard extends StatelessWidget {
             const SizedBox(height: 5),
             Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF6FFBBE),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    'Stock: ${product.stock}',
-                    style: const TextStyle(
-                      color: ShopColors.green,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF6FFBBE),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      'Stock: ${product.stock}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: ShopColors.green,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ),
@@ -996,6 +1335,9 @@ class _EditProductDialog extends StatefulWidget {
 class _EditProductDialogState extends State<_EditProductDialog> {
   late final _name = TextEditingController(text: widget.product.name);
   late final _category = TextEditingController(text: widget.product.category);
+  late final _subCategory = TextEditingController(
+    text: widget.product.subCategory,
+  );
   late final _sku = TextEditingController(text: widget.product.sku);
   late final _size = TextEditingController(text: widget.product.size);
   late final _color = TextEditingController(text: widget.product.color);
@@ -1014,6 +1356,7 @@ class _EditProductDialogState extends State<_EditProductDialog> {
     for (final controller in [
       _name,
       _category,
+      _subCategory,
       _sku,
       _size,
       _color,
@@ -1243,7 +1586,16 @@ class _EditProductDialogState extends State<_EditProductDialog> {
                         ),
                       ),
                       _field(_name, 'Product name', icon: Icons.label_outline),
-                      _field(_category, 'Category', icon: Icons.category_outlined),
+                      _field(
+                        _category,
+                        'Main Category',
+                        icon: Icons.category_outlined,
+                      ),
+                      _field(
+                        _subCategory,
+                        'Sub Category',
+                        icon: Icons.subdirectory_arrow_right_rounded,
+                      ),
                       _field(_sku, 'SKU', icon: Icons.qr_code_rounded),
                       _field(_size, 'Size', icon: Icons.straighten_rounded),
                       _field(_color, 'Color', icon: Icons.palette_outlined),
@@ -1302,6 +1654,7 @@ class _EditProductDialogState extends State<_EditProductDialog> {
                         _pop({
                           'name': _name.text.trim(),
                           'category': _category.text.trim(),
+                          'sub_category': _subCategory.text.trim(),
                           'sku': _sku.text.trim(),
                           'size': _size.text.trim(),
                           'color': _color.text.trim(),
