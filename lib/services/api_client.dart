@@ -142,6 +142,12 @@ class ApiClient {
     await _send('DELETE', '/products/$id');
   }
 
+  /// 30-day sales performance + recent stock movements for one product,
+  /// shown on the inventory report page.
+  static Future<Map<String, dynamic>> productSalesHistory(String id) async =>
+      (await _send('GET', '/products/$id/sales-history'))
+          as Map<String, dynamic>;
+
   static Future<Map<String, dynamic>> uploadProductImage(
     String productId, {
     required String contentType,

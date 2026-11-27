@@ -19,6 +19,9 @@ class _InventoryReportPageState extends State<InventoryReportPage> {
   String? _errorMessage;
   String? _productId;
   bool _started = false;
+  Map<String, dynamic>? _salesHistory;
+  String? _salesHistoryError;
+  bool _salesHistoryLoading = false;
 
   @override
   void didChangeDependencies() {
@@ -35,6 +38,7 @@ class _InventoryReportPageState extends State<InventoryReportPage> {
       _products = [arguments];
       _loading = false;
       _refreshInBackground();
+      _loadSalesHistory();
     } else {
       if (arguments is String && arguments.isNotEmpty) _productId = arguments;
       // Defer the first load until after the build phase so we never call
@@ -42,6 +46,27 @@ class _InventoryReportPageState extends State<InventoryReportPage> {
       // loop / freeze).
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _load();
+      });
+    }
+  }
+
+  Future<void> _loadSalesHistory() async {
+    final productId = _productId;
+    if (productId == null) return;
+    setState(() => _salesHistoryLoading = true);
+    try {
+      final history = await ApiClient.productSalesHistory(productId);
+      if (!mounted) return;
+      setState(() {
+        _salesHistory = history;
+        _salesHistoryError = null;
+        _salesHistoryLoading = false;
+      });
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _salesHistoryError = error.message;
+        _salesHistoryLoading = false;
       });
     }
   }
@@ -82,6 +107,7 @@ class _InventoryReportPageState extends State<InventoryReportPage> {
         _products = products;
         _loading = false;
       });
+      _loadSalesHistory();
     } on ApiException catch (error) {
       // A silent refresh must never blank out an already-rendered report.
       if (silent) return;
@@ -385,7 +411,415 @@ class _InventoryReportPageState extends State<InventoryReportPage> {
             ],
           ),
         ),
+        const SizedBox(height: 16),
+        // Sales Performance (ported from the Product Details web design)
+        _SalesPerformanceCard(
+          history: _salesHistory,
+          loading: _salesHistoryLoading,
+          errorMessage: _salesHistoryError,
+        ),
+        const SizedBox(height: 16),
+        // Recent Stock History (ported from the Product Details web design)
+        _StockHistoryCard(
+          history: _salesHistory?['history'] as List<dynamic>?,
+          loading: _salesHistoryLoading,
+          errorMessage: _salesHistoryError,
+          onDeleted: _loadSalesHistory,
+        ),
       ],
+    );
+  }
+}
+
+/// 30-day sales performance for the product: units sold, revenue, daily run
+/// rate and a stock runway estimation bar. Data comes from
+/// `/products/{id}/sales-history`; failures degrade to a quiet message.
+class _SalesPerformanceCard extends StatelessWidget {
+  const _SalesPerformanceCard({
+    required this.history,
+    required this.loading,
+    required this.errorMessage,
+  });
+
+  final Map<String, dynamic>? history;
+  final bool loading;
+  final String? errorMessage;
+
+  @override
+  Widget build(BuildContext context) {
+    final sold = (history?['sold'] as num?)?.toInt() ?? 0;
+    final revenue = (history?['revenue'] as num?)?.toDouble() ?? 0;
+    final runRate = (history?['daily_run_rate'] as num?)?.toDouble() ?? 0;
+    final runway = (history?['runway_days'] as num?)?.toInt();
+    final stock = (history?['stock'] as num?)?.toInt() ?? 0;
+
+    // Progress bar fill: proportion of the 30-day window the stock will last,
+    // clamped for display.
+    final fill = (runway == null || runway <= 0 || stock <= 0)
+        ? 0.0
+        : ((runway / 30) * 100).clamp(0.0, 100.0);
+
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Sales Performance',
+                      style: TextStyle(
+                        color: ShopColors.text,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      '30-day showroom metrics',
+                      style: TextStyle(color: ShopColors.muted, fontSize: 10),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: ShopColors.primary.withValues(alpha: .1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.query_stats_rounded,
+                  color: ShopColors.primary,
+                  size: 18,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (loading)
+            const LinearProgressIndicator(minHeight: 2)
+          else if (errorMessage != null)
+            Text(
+              'Could not load sales: $errorMessage',
+              style: const TextStyle(color: ShopColors.red, fontSize: 11),
+            )
+          else ...[
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: ShopColors.pale,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Sold This Month',
+                          style: TextStyle(color: ShopColors.muted, fontSize: 10),
+                        ),
+                        Text(
+                          '$sold pcs',
+                          style: const TextStyle(
+                            color: ShopColors.primaryContainer,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          'K${revenue.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            color: ShopColors.green,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: ShopColors.pale,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Daily Run Rate',
+                          style: TextStyle(color: ShopColors.muted, fontSize: 10),
+                        ),
+                        Text(
+                          '${runRate.toStringAsFixed(1)} pcs/day',
+                          style: const TextStyle(
+                            color: ShopColors.text,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const Text(
+                          'Steady turnover',
+                          style: TextStyle(color: ShopColors.muted, fontSize: 10),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: ShopColors.pale,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.check_circle_rounded,
+                        color: ShopColors.green,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 5),
+                      const Expanded(
+                        child: Text(
+                          'Runway Estimation',
+                          style: TextStyle(
+                            color: ShopColors.text,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        runway == null ? 'No sales data' : '~$runway days left',
+                        style: const TextStyle(
+                          color: ShopColors.green,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(99),
+                    child: LinearProgressIndicator(
+                      value: fill / 100,
+                      minHeight: 7,
+                      backgroundColor: Colors.white,
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                        ShopColors.green,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    runway == null
+                        ? 'No recent sales — runway cannot be estimated.'
+                        : 'Current velocity does not require immediate '
+                            'restock. Reorder recommended soon.',
+                    style: const TextStyle(color: ShopColors.muted, fontSize: 10),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Recent stock movements (sales of this product) rendered in the same
+/// icon-bubble list style as the web design's "Recent Stock History". The bin
+/// still voids the sale.
+class _StockHistoryCard extends StatefulWidget {
+  const _StockHistoryCard({
+    required this.history,
+    required this.loading,
+    required this.errorMessage,
+    required this.onDeleted,
+  });
+
+  final List<dynamic>? history;
+  final bool loading;
+  final String? errorMessage;
+  final VoidCallback onDeleted;
+
+  @override
+  State<_StockHistoryCard> createState() => _StockHistoryCardState();
+}
+
+class _StockHistoryCardState extends State<_StockHistoryCard> {
+  bool _deleting = false;
+
+  Future<void> _deleteSale(Map<String, dynamic> sale) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete sale?'),
+        content: Text(
+          'This removes the K${(sale['unit_price'] as num?)?.toStringAsFixed(2) ?? '0'} '
+          'record permanently. Sold stock will be returned to inventory.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(backgroundColor: ShopColors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _deleting = true);
+    try {
+      await ApiClient.deleteSale(sale['sale_id'] as String);
+      if (!mounted) return;
+      showShopMessage(context, 'Sale deleted.');
+      widget.onDeleted();
+    } on ApiException catch (error) {
+      if (mounted) showShopMessage(context, error.message);
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = widget.history ?? const [];
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Recent Stock History',
+            style: TextStyle(
+              color: ShopColors.text,
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 2),
+          const Text(
+            'Tap the bin to void a mistaken sale',
+            style: TextStyle(color: ShopColors.muted, fontSize: 10),
+          ),
+          const SizedBox(height: 8),
+          if (_deleting || widget.loading) const LinearProgressIndicator(minHeight: 2),
+          if (!widget.loading && !_deleting && widget.errorMessage != null)
+            Text(
+              'Could not load history: ${widget.errorMessage}',
+              style: const TextStyle(color: ShopColors.red, fontSize: 11),
+            )
+          else if (!widget.loading && !_deleting && entries.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 14),
+              child: Center(
+                child: Text(
+                  'No stock movements in the last 30 days.',
+                  style: TextStyle(color: ShopColors.muted, fontSize: 11),
+                ),
+              ),
+            ),
+          for (final raw in entries.take(4))
+            Builder(
+              builder: (context) {
+                final sale = raw as Map<String, dynamic>;
+                final quantity = (sale['quantity'] as num?)?.toInt() ?? 0;
+                return Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 8,
+                  ),
+                  decoration: const BoxDecoration(
+                    border: Border(bottom: BorderSide(color: ShopColors.pale)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        margin: const EdgeInsets.only(right: 10),
+                        decoration: BoxDecoration(
+                          color: ShopColors.orange.withValues(alpha: .1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          '${sale['sale_type'] ?? ''}'.toLowerCase() == 'layby'
+                              ? Icons.shopping_bag_outlined
+                              : Icons.point_of_sale_outlined,
+                          color: ShopColors.orange,
+                          size: 20,
+                        ),
+                      ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Sale • ${sale['payment_method'] ?? 'POS'}',
+                              style: const TextStyle(
+                                color: ShopColors.text,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            Text(
+                              sale['sold_at']?.toString().substring(0, 16) ?? '',
+                              style: const TextStyle(
+                                color: ShopColors.muted,
+                                fontSize: 9,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Text(
+                        '-$quantity pc${quantity == 1 ? '' : 's'}',
+                        style: const TextStyle(
+                          color: ShopColors.orange,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      IconButton(
+                        key: Key('deleteSale${sale['sale_id']}'),
+                        tooltip: 'Delete sale',
+                        onPressed: _deleting ? null : () => _deleteSale(sale),
+                        icon: const Icon(
+                          Icons.delete_outline_rounded,
+                          color: ShopColors.red,
+                          size: 19,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
     );
   }
 }
@@ -919,12 +1353,13 @@ class _BottomActions extends StatelessWidget {
               child: SizedBox(
                 height: 50,
                 child: OutlinedButton.icon(
-                  onPressed: () => showShopMessage(
+                  onPressed: () => Navigator.pushNamed(
                     context,
-                    'Open this product in the inventory list to adjust stock.',
+                    '/sales',
+                    arguments: product['id'],
                   ),
-                  icon: const Icon(Icons.tune, size: 20),
-                  label: const Text('Stock Count'),
+                  icon: const Icon(Icons.point_of_sale_outlined, size: 20),
+                  label: const Text('Sale'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: ShopColors.primaryContainer,
                     side: const BorderSide(color: ShopColors.outline),

@@ -320,8 +320,7 @@ class _ReportsPageState extends State<ReportsPage> with RouteAware {
                 const SizedBox(height: 11),
                 _ProfitLossCard(report: _report ?? const {}),
                 const SizedBox(height: 11),
-                const _InventorySummaryCard(),
-                const SizedBox(height: 11),
+
                 _SalesChartCard(days: _dailySales),
                 const SizedBox(height: 11),
                 _SalesLogCard(
@@ -1394,12 +1393,29 @@ class _SalesLogCardState extends State<_SalesLogCard> {
             ),
           for (final sale in sales)
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
               decoration: const BoxDecoration(
                 border: Border(bottom: BorderSide(color: ShopColors.pale)),
               ),
               child: Row(
                 children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    margin: const EdgeInsets.only(right: 10),
+                    decoration: BoxDecoration(
+                      color: ShopColors.orange.withValues(alpha: .1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      (sale['sale_type'] ?? '').toString().toLowerCase() ==
+                              'layby'
+                          ? Icons.shopping_bag_outlined
+                          : Icons.point_of_sale_outlined,
+                      color: ShopColors.orange,
+                      size: 20,
+                    ),
+                  ),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,

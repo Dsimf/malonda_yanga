@@ -1165,6 +1165,99 @@ async def upload_product_image(
     return {"image_url": image_url}
 
 
+"""30-day sales performance plus the most recent stock movements (sales) for
+one product. Powers the "Sales Performance" and "Recent Stock History"
+sections of the inventory report page.
+"""
+@app.get("/products/{product_id}/sales-history")
+async def product_sales_history(
+    product_id: str,
+    days: int = Query(default=30, ge=1, le=365),
+    user: dict[str, Any] = Depends(current_user),
+    token: str = Depends(_bearer_token),
+) -> dict[str, Any]:
+    shop = await _owned_shop(user, token)
+    shop_filter = {"shop_id": f"eq.{shop['id']}"}
+
+    product_rows = await _table(
+        "GET",
+        "products",
+        token,
+        params={
+            "select": "id,quantity",
+            "id": f"eq.{product_id}",
+            **shop_filter,
+        },
+    )
+    if not product_rows:
+        raise HTTPException(status_code=404, detail="Product not found.")
+    stock = int(product_rows[0].get("quantity") or 0)
+
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    sales = await _table(
+        "GET",
+        "sales",
+        token,
+        params={
+            "select": "id,sold_at,payment_method,sale_type,total",
+            **shop_filter,
+            "sold_at": f"gte.{since.isoformat()}",
+            "order": "sold_at.desc",
+        },
+    )
+    sales_by_id = {str(sale["id"]): sale for sale in sales}
+    sale_ids = list(sales_by_id)
+    lines: list[dict[str, Any]] = []
+    if sale_ids:
+        lines = await _table(
+            "GET",
+            "sale_items",
+            token,
+            params={
+                "select": "sale_id,product_id,quantity,unit_price,unit_cost",
+                "product_id": f"eq.{product_id}",
+                "sale_id": f"in.({','.join(sale_ids)})",
+            },
+        )
+
+    sold = 0
+    revenue = 0.0
+    history: list[dict[str, Any]] = []
+    for line in lines:
+        sale = sales_by_id.get(str(line["sale_id"]))
+        if sale is None:
+            continue
+        quantity = int(line["quantity"])
+        price = float(line["unit_price"])
+        sold += quantity
+        revenue += price * quantity
+        history.append(
+            {
+                "sale_id": str(line["sale_id"]),
+                "sold_at": sale["sold_at"],
+                "payment_method": sale["payment_method"],
+                "sale_type": sale["sale_type"],
+                "quantity": quantity,
+                "unit_price": price,
+            }
+        )
+
+    history.sort(key=lambda entry: str(entry["sold_at"]), reverse=True)
+    daily_run_rate = sold / days
+    runway_days = int(stock / daily_run_rate) if daily_run_rate > 0 else None
+
+    return {
+        "product_id": product_id,
+        "stock": stock,
+        "window_days": days,
+        "sold": sold,
+        "revenue": round(revenue, 2),
+        "daily_run_rate": round(daily_run_rate, 2),
+        "runway_days": runway_days,
+        "history": history[:8],
+    }
+
+
 @app.get("/suppliers")
 async def suppliers(
     user: dict[str, Any] = Depends(current_user),
