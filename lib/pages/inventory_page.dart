@@ -535,7 +535,7 @@ class _InventoryPageState extends State<InventoryPage> with RouteAware {
                             crossAxisCount: 2,
                             mainAxisSpacing: 10,
                             crossAxisSpacing: 10,
-                            childAspectRatio: .8,
+                            childAspectRatio: .72,
                           ),
                       itemBuilder: (context, index) => _ProductCard(
                         product: filteredProducts[index],
@@ -702,7 +702,7 @@ class _CategorySection extends StatelessWidget {
                             crossAxisCount: 2,
                             mainAxisSpacing: 10,
                             crossAxisSpacing: 10,
-                            childAspectRatio: .8,
+                            childAspectRatio: .72,
                           ),
                       itemBuilder: (context, index) {
                         final product = grouped[sub]![index];

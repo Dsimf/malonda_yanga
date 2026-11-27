@@ -69,6 +69,15 @@ class _InventoryReportPageState extends State<InventoryReportPage> {
     try {
       final products = await ApiClient.products();
       if (!mounted) return;
+      if (silent) {
+        final index = products.indexWhere((p) => p['id'] == _productId);
+        if (index >= 0) {
+          setState(() {
+            _products = [products[index]];
+          });
+        }
+        return;
+      }
       setState(() {
         _products = products;
         _loading = false;
