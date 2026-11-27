@@ -1184,7 +1184,7 @@ async def product_sales_history(
         "products",
         token,
         params={
-            "select": "id,quantity",
+            "select": "id,name,category,sub_category,quantity",
             "id": f"eq.{product_id}",
             **shop_filter,
         },
@@ -1220,6 +1220,7 @@ async def product_sales_history(
             },
         )
 
+    product_row = product_rows[0]
     sold = 0
     revenue = 0.0
     history: list[dict[str, Any]] = []
@@ -1239,6 +1240,11 @@ async def product_sales_history(
                 "sale_type": sale["sale_type"],
                 "quantity": quantity,
                 "unit_price": price,
+                # Product details so the client can render what was sold
+                # without a second request.
+                "product_name": product_row.get("name") or "",
+                "category": product_row.get("category") or "",
+                "sub_category": product_row.get("sub_category") or "",
             }
         )
 
@@ -1667,7 +1673,7 @@ async def reports(
         "products",
         token,
         params={
-            "select": "id,name,category,quantity",
+            "select": "id,name,category,sub_category,quantity",
             **shop_filter,
         },
     )
@@ -1690,6 +1696,35 @@ async def reports(
         payment_totals[method] = payment_totals.get(method, 0) + amount
         total_sales += amount
 
+    # Attach the sold product details (name / category / sub category) to
+    # every sale so the client can show what was sold in the sales log
+    # without extra requests.
+    items_by_sale: dict[str, list[dict[str, Any]]] = {}
+    for line in lines:
+        items_by_sale.setdefault(str(line["sale_id"]), []).append(line)
+    sales = [
+        {
+            **sale,
+            "items": [
+                {
+                    "product_id": str(line.get("product_id") or ""),
+                    "product_name": line.get("product_name") or "",
+                    "quantity": int(line["quantity"]),
+                    "category": (
+                        products_by_id.get(str(line.get("product_id") or ""))
+                        or {}
+                    ).get("category") or "",
+                    "sub_category": (
+                        products_by_id.get(str(line.get("product_id") or ""))
+                        or {}
+                    ).get("sub_category") or "",
+                }
+                for line in items_by_sale.get(str(sale["id"]), [])
+            ],
+        }
+        for sale in sales
+    ]
+
     for line in lines:
         # product_id becomes NULL once the referenced product is deleted;
         # report those lines under their recorded product_name instead.
@@ -1708,6 +1743,7 @@ async def reports(
                 "product_id": product_id,
                 "name": (product or {}).get("name") or line["product_name"],
                 "category": (product or {}).get("category") or "",
+                "sub_category": (product or {}).get("sub_category") or "",
                 "stock": (product or {}).get("quantity") or 0,
                 "quantity": 0,
                 "revenue": 0.0,

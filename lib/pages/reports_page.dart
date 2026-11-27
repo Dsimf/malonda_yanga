@@ -29,13 +29,14 @@ class _ReportsPageState extends State<ReportsPage> with RouteAware {
   Map<String, dynamic>? _report;
   String? _errorMessage;
   bool _loading = true;
-  static const _categories = [
+
+  /// Real categories from the shop's sold products, not a hardcoded list.
+  List<String> get _categories => [
     'All Categories',
-    'T-Shirts',
-    'Hoodies',
-    'Jeans',
-    'Shoes',
-  ];
+    for (final product in _topProducts)
+      if ((product['category'] as String? ?? '').trim().isNotEmpty)
+        (product['category'] as String).trim(),
+  ].toSet().toList();
 
   /// Callback registered by a mounted ReportsPage so that a sale completion
   /// elsewhere in the app can trigger a refresh of the report data.
@@ -1397,8 +1398,29 @@ class _SalesLogCardState extends State<_SalesLogCard> {
               decoration: const BoxDecoration(
                 border: Border(bottom: BorderSide(color: ShopColors.pale)),
               ),
-              child: Row(
-                children: [
+              child: Builder(
+                builder: (context) {
+                  final items = (sale['items'] as List<dynamic>?)
+                          ?.whereType<Map<String, dynamic>>()
+                          .toList() ??
+                      const <Map<String, dynamic>>[];
+                  String itemLine(Map<String, dynamic> item) {
+                    final categoryName = '${item['category'] ?? ''}'.trim();
+                    final subCategoryName = '${item['sub_category'] ?? ''}'
+                        .trim();
+                    final categoryLine = subCategoryName.isEmpty
+                        ? categoryName
+                        : '$categoryName › $subCategoryName';
+                    final quantity = (item['quantity'] as num?)?.toInt() ?? 0;
+                    final name = '${item['product_name'] ?? ''}'.trim();
+                    return [
+                      if (categoryLine.isNotEmpty) categoryLine,
+                      if (name.isNotEmpty) name,
+                      'x$quantity',
+                    ].join(' • ');
+                  }
+                  return Row(
+                    children: [
                   Container(
                     width: 40,
                     height: 40,
@@ -1436,6 +1458,18 @@ class _SalesLogCardState extends State<_SalesLogCard> {
                             fontSize: 9,
                           ),
                         ),
+                        // What was sold: category › sub category • name • qty.
+                        for (final item in items)
+                          Text(
+                            itemLine(item),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: ShopColors.primaryContainer,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -1458,7 +1492,9 @@ class _SalesLogCardState extends State<_SalesLogCard> {
                       size: 19,
                     ),
                   ),
-                ],
+                    ],
+                  );
+                },
               ),
             ),
         ],
@@ -1737,26 +1773,20 @@ class _ProductSale {
   final Color color;
 
   factory _ProductSale.fromJson(Map<String, dynamic> json, int rank) {
-    final rawCategory = (json['category'] as String? ?? '').toLowerCase();
-    final category = rawCategory.contains('t-shirt')
-        ? 'T-Shirts'
-        : rawCategory.contains('hoodie') || rawCategory.contains('jacket')
-        ? 'Hoodies'
-        : rawCategory.contains('trouser')
-        ? 'Jeans'
-        : rawCategory.contains('footwear')
-        ? 'Shoes'
-        : 'All Categories';
-    final icon = category == 'Shoes'
+    final category = (json['category'] as String? ?? '').trim();
+    final icon = category.toLowerCase().contains('shoe') ||
+            category.toLowerCase().contains('footwear')
         ? Icons.directions_run_rounded
-        : category == 'Jeans'
+        : category.toLowerCase().contains('jean') ||
+              category.toLowerCase().contains('trouser')
         ? Icons.straighten_rounded
-        : category == 'Hoodies'
+        : category.toLowerCase().contains('hoodie') ||
+              category.toLowerCase().contains('jacket')
         ? Icons.hiking_rounded
         : Icons.checkroom_rounded;
     return _ProductSale(
       name: json['name'] as String,
-      category: category,
+      category: category.isEmpty ? 'Uncategorized' : category,
       stock: (json['stock'] as num).toInt(),
       quantity: (json['quantity'] as num).toInt(),
       revenue: 'K${(json['revenue'] as num).toStringAsFixed(0)}',

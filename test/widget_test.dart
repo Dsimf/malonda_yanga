@@ -339,13 +339,13 @@ void main() {
       await tester.drag(find.byType(ListView), const Offset(0, -700));
       await tester.pumpAndSettle();
       await tester.ensureVisible(
-        find.byKey(const Key('reportCategoryHoodies')),
+        find.byKey(const Key('reportCategoryAll Categories')),
       );
-      await tester.tap(find.byKey(const Key('reportCategoryHoodies')));
+      await tester.tap(find.byKey(const Key('reportCategoryJackets & Hoodies')));
       await tester.pumpAndSettle();
       expect(find.text('Showing 1 items'), findsOneWidget);
       expect(find.text('Hoodie Jacket'), findsOneWidget);
-      expect(find.text("Men's T-Shirt"), findsNothing);
+      expect(find.text("Men’s T-Shirt"), findsNothing);
 
       await tester.drag(find.byType(ListView), const Offset(0, -500));
       await tester.pumpAndSettle();
@@ -785,14 +785,15 @@ Map<String, dynamic> _mockReport(String startText, String endText) {
     final quantity = item['quantity'] as int;
     final total = productTotals.putIfAbsent(
       productId,
-      () => {
+      () => ({
         'product_id': productId,
         'name': product['name'],
         'category': product['category'],
+        'sub_category': product['sub_category'] ?? '',
         'stock': product['quantity'],
         'quantity': 0,
         'revenue': 0.0,
-      },
+      }),
     );
     total['quantity'] = (total['quantity'] as int) + quantity;
     total['revenue'] =
@@ -801,7 +802,26 @@ Map<String, dynamic> _mockReport(String startText, String endText) {
     totalCost += (item['unit_cost'] as num).toDouble() * quantity;
   }
   return {
-    'sales': selectedSales,
+    'sales': [
+      for (final sale in selectedSales)
+        {
+          ...sale,
+          'items': [
+            for (final item in items)
+              if (item['sale_id'] == sale['id'])
+                {
+                  'product_id': item['product_id'],
+                  'product_name': item['product_name'],
+                  'quantity': item['quantity'],
+                  'category': _products
+                      .firstWhere(
+                        (product) => product['id'] == item['product_id'],
+                      )['category'],
+                  'sub_category': '',
+                },
+          ],
+        },
+    ],
     'items': items,
     'total_sales': totalSales,
     'total_cost': totalCost,

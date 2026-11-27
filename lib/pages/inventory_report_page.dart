@@ -746,6 +746,13 @@ class _StockHistoryCardState extends State<_StockHistoryCard> {
               builder: (context) {
                 final sale = raw as Map<String, dynamic>;
                 final quantity = (sale['quantity'] as num?)?.toInt() ?? 0;
+                final categoryName = '${sale['category'] ?? ''}'.trim();
+                final subCategoryName = '${sale['sub_category'] ?? ''}'.trim();
+                final categoryLine = subCategoryName.isEmpty
+                    ? (categoryName.isEmpty
+                          ? 'Uncategorized'
+                          : categoryName)
+                    : '$categoryName › $subCategoryName';
                 return Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 4,
@@ -782,6 +789,17 @@ class _StockHistoryCardState extends State<_StockHistoryCard> {
                                 color: ShopColors.text,
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            // What was sold: category › sub category, name.
+                            Text(
+                              '$categoryLine • ${sale['product_name'] ?? 'Product'}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: ShopColors.primaryContainer,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                             Text(
