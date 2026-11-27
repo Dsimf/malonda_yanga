@@ -48,9 +48,16 @@ class _InventoryReportPageState extends State<InventoryReportPage> {
 
   void _refreshInBackground() {
     // Best-effort refresh of an already-rendered report; failures are
-    // ignored because the page is showing the passed-in data.
-    _load(silent: true);
+    // ignored because the page is showing the passed-in data. It must not
+    // touch _loading, and must never fire more than once per visit —
+    // overlapping refreshes re-trigger layout of the whole page and feel
+    // like a freeze while the (often cold) server responds.
+    if (_refreshInFlight) return;
+    _refreshInFlight = true;
+    _load(silent: true).whenComplete(() => _refreshInFlight = false);
   }
+
+  bool _refreshInFlight = false;
 
   Future<void> _load({bool silent = false}) async {
     if (!silent) {
@@ -554,12 +561,31 @@ class _HeroCard extends StatelessWidget {
                 color: ShopColors.pale,
                 child: imageUrl.isNotEmpty
                     ? Image.network(
-                        imageUrl,
+                        // A plain Image.network can keep serving a stale
+                        // cached (failed) response for an unchanged URL.
+                        // A short cache-buster makes Flutter refetch once.
+                        () {
+                          final uri = Uri.parse(imageUrl);
+                          return uri.replace(
+                            queryParameters: {
+                              ...uri.queryParameters,
+                              'v': '2',
+                            },
+                          ).toString();
+                        }(),
                         fit: BoxFit.cover,
                         width: 112,
                         height: 128,
                         cacheWidth: 224,
                         cacheHeight: 256,
+                        frameBuilder: (context, child, frame, wasSync) =>
+                            wasSync
+                            ? child
+                            : AnimatedOpacity(
+                                opacity: frame == null ? 0 : 1,
+                                duration: const Duration(milliseconds: 180),
+                                child: child,
+                              ),
                         errorBuilder: (context, error, stackTrace) => const Icon(
                           Icons.inventory_2_outlined,
                           color: ShopColors.muted,

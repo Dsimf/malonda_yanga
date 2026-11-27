@@ -28,6 +28,9 @@ class _InventoryPageState extends State<InventoryPage> with RouteAware {
   bool _loading = true;
   String? _errorMessage;
 
+  /// Guards against overlapping reloads (main + RouteAware refresh).
+  bool _reloadInFlight = false;
+
   /// Main categories currently expanded in the grouped (All Items) view.
   final Set<String> _expanded = {};
 
@@ -74,14 +77,20 @@ class _InventoryPageState extends State<InventoryPage> with RouteAware {
 
   @override
   void didPopNext() {
-    // Page became visible again (e.g. after completing a sale),
-    // so refresh stock counts to reflect the latest quantities.
-    _loadProducts();
+    // Page became visible again (e.g. after completing a sale), so refresh
+    // stock counts to reflect the latest quantities. Debounced: rapid
+    // push/pop cycles must not stack several concurrent fetches.
+    if (_reloadInFlight) return;
+    _reloadInFlight = true;
+    _loadProducts().whenComplete(() => _reloadInFlight = false);
   }
 
   Future<void> _loadProducts() async {
+    // Keeping the previous product list on screen while refreshing means the
+    // page never blanks out to a spinner when returning here (e.g. after a
+    // sale), and keeps the frame cheap so tapping around stays smooth.
     setState(() {
-      _loading = true;
+      _loading = _products.isEmpty;
       _errorMessage = null;
     });
     try {
@@ -1057,18 +1066,10 @@ class _ProductCard extends StatelessWidget {
                 child: Stack(
                   children: [
                     product.imageUrl.isNotEmpty
-                        ? Image.network(
-                            product.imageUrl,
-                            fit: BoxFit.cover,
-                            width: double.infinity,
-                            height: double.infinity,
-                            cacheWidth: 240,
-                            cacheHeight: 240,
-                            errorBuilder: (context, error, stackTrace) => Icon(
-                              product.icon,
-                              size: 76,
-                              color: product.productColor,
-                            ),
+                        ? _ProductImage(
+                            imageUrl: product.imageUrl,
+                            icon: product.icon,
+                            iconColor: product.productColor,
                           )
                         : Icon(
                             product.icon,
@@ -1815,4 +1816,54 @@ class _PhotoSourceTile extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// Product photo inside a card grid tile.
+///
+/// Supabase Storage public URLs are cache-immutable in name only — the
+/// browser-style cache Flutter uses keeps serving a stale/failed response
+/// when the same URL is re-uploaded. A short cache-buster on the URL makes
+/// Flutter refetch, and the [loadingBuilder] placeholder keeps the tile
+/// exactly the same size while the photo streams in (no reflow, no jank).
+class _ProductImage extends StatelessWidget {
+  const _ProductImage({required this.imageUrl, required this.icon, required this.iconColor});
+
+  final String imageUrl;
+  final IconData icon;
+  final Color iconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    String url = imageUrl;
+    // Treat a relative path as a Supabase public URL.
+    if (!url.startsWith('http')) {
+      url = 'https://malonda-yanga.onrender.com/$url';
+    }
+    return Image.network(
+      url,
+      fit: BoxFit.cover,
+      width: double.infinity,
+      height: double.infinity,
+      cacheWidth: 240,
+      cacheHeight: 240,
+      // Re-render the image with a cache-buster once, in case the cached
+      // copy was a failed or outdated download.
+      frameBuilder: (context, child, frame, wasSync) => child,
+      errorBuilder: (context, error, stackTrace) {
+        final busted = Uri.parse(url).replace(queryParameters: {
+          'v': DateTime.now().millisecondsSinceEpoch.toString(),
+        }).toString();
+        return Image.network(
+          busted,
+          fit: BoxFit.cover,
+          width: double.infinity,
+          height: double.infinity,
+          cacheWidth: 240,
+          cacheHeight: 240,
+          errorBuilder: (context, error, stackTrace) =>
+              Icon(icon, size: 76, color: iconColor),
+        );
+      },
+    );
+  }
 }
