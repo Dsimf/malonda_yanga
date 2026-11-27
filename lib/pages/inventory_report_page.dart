@@ -183,7 +183,9 @@ class _InventoryReportPageState extends State<InventoryReportPage> {
         // Status + quick actions
         Row(
           children: [
-            _StatusChip(label: statusLabel, color: statusColor),
+            Flexible(
+              child: _StatusChip(label: statusLabel, color: statusColor),
+            ),
             const SizedBox(width: 8),
             const _InfoChip(label: 'POS Ready'),
             const Spacer(),
@@ -473,12 +475,16 @@ class _StatusChip extends StatelessWidget {
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 6),
-        Text(
-          label,
-          style: TextStyle(
-            color: color,
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
       ],
@@ -559,8 +565,13 @@ class _HeroCard extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        // Bounded height so the Expanded/Spacer inside the right-hand column
+        // are legal. Unbounded (inside the scrollable) this crashed layout —
+        // the "freeze" when opening the report.
+        SizedBox(
+          height: 150,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
@@ -678,11 +689,15 @@ class _HeroCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 4),
-                      const Text(
-                        '/ unit',
-                        style: TextStyle(
-                          color: ShopColors.muted,
-                          fontSize: 12,
+                      const Flexible(
+                        child: Text(
+                          '/ unit',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: ShopColors.muted,
+                            fontSize: 12,
+                          ),
                         ),
                       ),
                     ],
@@ -691,6 +706,7 @@ class _HeroCard extends StatelessWidget {
               ),
             ),
           ],
+          ),
         ),
         const SizedBox(height: 14),
         Container(
@@ -700,33 +716,40 @@ class _HeroCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Cost Price',
-                    style: TextStyle(color: ShopColors.muted, fontSize: 12),
-                  ),
-                  Text(
-                    'K${cost.toStringAsFixed(2)}',
-                    style: const TextStyle(
-                      color: ShopColors.text,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Cost Price',
+                      style: TextStyle(color: ShopColors.muted, fontSize: 12),
                     ),
-                  ),
-                ],
+                    Text(
+                      'K${cost.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        color: ShopColors.text,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const Spacer(),
-              Column(
+              const SizedBox(width: 8),
+              Flexible(
+                child: Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   const Text(
                     'Profit Margin',
                     style: TextStyle(color: ShopColors.muted, fontSize: 12),
                   ),
                   Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       const Icon(
                         Icons.trending_up_rounded,
@@ -734,19 +757,22 @@ class _HeroCard extends StatelessWidget {
                         size: 17,
                       ),
                       const SizedBox(width: 3),
-                      Text(
-                        'K${margin.toStringAsFixed(2)} '
-                        '(${marginPercent.toStringAsFixed(1)}%)',
-                        style: const TextStyle(
-                          color: ShopColors.green,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
+                      Flexible(
+                        child: Text(
+                          'K${margin.toStringAsFixed(2)} '
+                          '(${marginPercent.toStringAsFixed(1)}%)',
+                          style: const TextStyle(
+                            color: ShopColors.green,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ],
               ),
+            ),
             ],
           ),
         ),

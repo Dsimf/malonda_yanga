@@ -8,6 +8,8 @@ import 'package:http/testing.dart';
 import 'package:malonda_yanga/main.dart';
 import 'package:malonda_yanga/pages/login_page.dart' show LoginPage, loginPrefsDisabledForTests;
 import 'package:malonda_yanga/pages/add_product_page.dart';
+import 'package:malonda_yanga/pages/inventory_page.dart';
+import 'package:malonda_yanga/pages/inventory_report_page.dart';
 import 'package:malonda_yanga/pages/layby_page.dart';
 import 'package:malonda_yanga/pages/reports_page.dart';
 import 'package:malonda_yanga/pages/sale_success_page.dart';
@@ -539,6 +541,45 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('OPEN · K250'), findsOneWidget);
     expect(find.text('Payment history'), findsOneWidget);
+  });
+
+  // Regression: tapping a product card on the inventory page must open the
+  // per-product inventory report (not the sales page) without a RenderFlex
+  // overflow or a freeze while a cold server responds.
+  testWidgets('inventory product card opens the inventory report page', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: const InventoryPage(),
+        routes: {
+          '/inventory/report': (_) => const InventoryReportPage(),
+          '/sales': (_) => const Scaffold(body: Text('SALES PAGE MARKER')),
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // No layout exception while rendering the card grid.
+    expect(tester.takeException(), isNull);
+
+    // Only the first category (alphabetically "Accessories") is expanded
+    // by default, so its card is the one visible on screen.
+    await tester.ensureVisible(find.text('Leather Belt').first);
+    await tester.tap(find.text('Leather Belt').first);
+    await tester.pumpAndSettle();
+
+    // The report page rendered from the passed-in product data.
+    expect(find.text('RETAIL SELLING PRICE'), findsOneWidget);
+    expect(find.text('Cost Price'), findsOneWidget);
+    // We never landed on the sales page.
+    expect(find.text('SALES PAGE MARKER'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   // Error bodies of every shape the API can produce must turn into a

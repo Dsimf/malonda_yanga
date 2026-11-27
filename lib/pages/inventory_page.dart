@@ -483,7 +483,7 @@ class _InventoryPageState extends State<InventoryPage> with RouteAware {
                             _expanded.add(main);
                           }
                         }),
-                        onTapProduct: (product) => Navigator.pushNamed(
+                        onSellProduct: (product) => Navigator.pushNamed(
                           context,
                           '/sales',
                           arguments: product.id,
@@ -530,16 +530,22 @@ class _InventoryPageState extends State<InventoryPage> with RouteAware {
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: filteredProducts.length,
+                      // mainAxisExtent instead of childAspectRatio: a fixed
+                      // tile height can never overflow, whereas an aspect
+                      // ratio makes the tile height depend on the window
+                      // width. 310 comfortably fits the tallest card variant
+                      // (name + sub category + supplier rows) — the previous
+                      // 256 threw a 54px RenderFlex overflow on the bottom.
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 2,
                             mainAxisSpacing: 10,
                             crossAxisSpacing: 10,
-                            childAspectRatio: .72,
+                            mainAxisExtent: 310,
                           ),
                       itemBuilder: (context, index) => _ProductCard(
                         product: filteredProducts[index],
-                        onTap: () => Navigator.pushNamed(
+                        onSell: () => Navigator.pushNamed(
                           context,
                           '/sales',
                           arguments: filteredProducts[index].id,
@@ -573,7 +579,7 @@ class _CategorySection extends StatelessWidget {
     required this.products,
     required this.expanded,
     required this.onToggle,
-    required this.onTapProduct,
+    required this.onSellProduct,
     required this.onOpenProduct,
     required this.onEditProduct,
     required this.onDeleteProduct,
@@ -583,7 +589,7 @@ class _CategorySection extends StatelessWidget {
   final List<_Product> products;
   final bool expanded;
   final VoidCallback onToggle;
-  final ValueChanged<_Product> onTapProduct;
+  final ValueChanged<_Product> onSellProduct;
   final ValueChanged<_Product> onOpenProduct;
   final ValueChanged<_Product> onEditProduct;
   final ValueChanged<_Product> onDeleteProduct;
@@ -697,18 +703,20 @@ class _CategorySection extends StatelessWidget {
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: grouped[sub]!.length,
+                      // Same fixed tile height as the filtered grid above —
+                      // must stay in sync or one of the two overflows.
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 2,
                             mainAxisSpacing: 10,
                             crossAxisSpacing: 10,
-                            childAspectRatio: .72,
+                            mainAxisExtent: 310,
                           ),
                       itemBuilder: (context, index) {
                         final product = grouped[sub]![index];
                         return _ProductCard(
                           product: product,
-                          onTap: () => onTapProduct(product),
+                          onSell: () => onSellProduct(product),
                           onOpen: () => onOpenProduct(product),
                           onEdit: () => onEditProduct(product),
                           onDelete: () => onDeleteProduct(product),
@@ -1024,14 +1032,14 @@ class _Product {
 class _ProductCard extends StatelessWidget {
   const _ProductCard({
     required this.product,
-    required this.onTap,
+    required this.onSell,
     required this.onOpen,
     required this.onEdit,
     required this.onDelete,
   });
 
   final _Product product;
-  final VoidCallback onTap;
+  final VoidCallback onSell;
   final VoidCallback onOpen;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
@@ -1042,6 +1050,9 @@ class _ProductCard extends StatelessWidget {
     borderRadius: BorderRadius.circular(15),
     child: InkWell(
       borderRadius: BorderRadius.circular(15),
+      // Tapping the card body opens the per-product inventory report
+      // directly. Previously it pushed the sales page, which triggered a
+      // burst of network work on the (often cold) server and froze the UI.
       onTap: onOpen,
       child: Padding(
         padding: const EdgeInsets.all(9),
@@ -1187,7 +1198,7 @@ class _ProductCard extends StatelessWidget {
                   icon: Icons.sell_outlined,
                   color: ShopColors.orange,
                   tooltip: 'Sell product',
-                  onPressed: onTap,
+                  onPressed: onSell,
                 ),
               ],
             ),
@@ -1581,6 +1592,11 @@ class _EditProductDialogState extends State<_EditProductDialog> {
                                     ? Image.network(
                                         product.imageUrl,
                                         fit: BoxFit.cover,
+                                        // Decode at display size — the dialog
+                                        // box is ~384px wide, so decoding a
+                                        // 1600px photo at full resolution
+                                        // stalls the UI thread (freeze).
+                                        cacheWidth: 420,
                                         errorBuilder:
                                             (context, error, stackTrace) =>
                                                 const Icon(
