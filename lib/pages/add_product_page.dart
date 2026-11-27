@@ -21,6 +21,7 @@ class AddProductPage extends StatefulWidget {
 
 const _kSavedNames = 'savedProductNames';
 const _kSavedCategories = 'savedCategories';
+const _kSavedSubCategories = 'savedSubCategories';
 const _kSavedColors = 'savedCustomColors';
 
 class _AddProductPageState extends State<AddProductPage> {
@@ -43,6 +44,7 @@ class _AddProductPageState extends State<AddProductPage> {
   int _supplierAutoKey = 0;
   List<String> _savedNames = [];
   List<String> _savedCategories = [];
+  List<String> _savedSubCategories = [];
   List<Map<String, String>> _savedColors = [];
 
   @override
@@ -100,6 +102,7 @@ class _AddProductPageState extends State<AddProductPage> {
     setState(() {
       _savedNames = prefs.getStringList(_kSavedNames) ?? [];
       _savedCategories = prefs.getStringList(_kSavedCategories) ?? [];
+      _savedSubCategories = prefs.getStringList(_kSavedSubCategories) ?? [];
       _savedColors = (prefs.getStringList(_kSavedColors) ?? [])
           .map(
             (entry) => Map<String, String>.from(
@@ -279,6 +282,161 @@ child: const Row(
     if (mounted) {
       showShopMessage(context, 'Removed "$category".');
     }
+  }
+
+  Future<void> _rememberSubCategory(String subCategory) async {
+    if (_savedSubCategories.contains(subCategory)) {
+      return;
+    }
+    _savedSubCategories = [..._savedSubCategories, subCategory];
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_kSavedSubCategories, _savedSubCategories);
+  }
+
+  Future<void> _removeSubCategory(String subCategory) async {
+    setState(() {
+      _savedSubCategories = _savedSubCategories
+          .where((c) => c != subCategory)
+          .toList();
+      if (_subCategory == subCategory) {
+        _subCategory = _savedSubCategories.isNotEmpty
+            ? _savedSubCategories.first
+            : '';
+        _subCategoryController.text = _subCategory;
+      }
+    });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_kSavedSubCategories, _savedSubCategories);
+    if (mounted) {
+      showShopMessage(context, 'Removed "$subCategory".');
+    }
+  }
+
+  /// Bottom sheet that lists saved sub categories and lets the user delete any
+  /// of them.
+  Future<void> _manageSubCategories() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.subdirectory_arrow_right_rounded,
+                      color: ShopColors.primary, size: 20),
+                  SizedBox(width: 9),
+                  Text(
+                    'Saved sub categories',
+                    style: TextStyle(
+                      color: ShopColors.text,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+              const Padding(
+                padding: EdgeInsets.only(top: 4, left: 29),
+                child: Text(
+                  'Tap the bin to remove a sub category you added.',
+                  style: TextStyle(color: ShopColors.muted, fontSize: 11),
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (_savedSubCategories.isEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 20,
+                  ),
+                  decoration: BoxDecoration(
+                    color: ShopColors.pale,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.inbox_rounded,
+                          color: Color(0xFF9BA0AE), size: 20),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'No saved sub categories yet. Add one with the + button on the Sub Category field above.',
+                          style: TextStyle(
+                            color: ShopColors.muted,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                Flexible(
+                  child: ListView(
+                    shrinkWrap: true,
+                    padding: EdgeInsets.zero,
+                    children: [
+                      for (final subCategory in _savedSubCategories)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.fromLTRB(
+                            14,
+                            4,
+                            4,
+                            4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: ShopColors.pale,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.bookmark_added_rounded,
+                                size: 16,
+                                color: ShopColors.primary,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  subCategory,
+                                  style: const TextStyle(
+                                    color: ShopColors.text,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                visualDensity: VisualDensity.compact,
+                                tooltip: 'Remove $subCategory',
+                                onPressed: () async {
+                                  Navigator.pop(sheetContext);
+                                  await _removeSubCategory(subCategory);
+                                },
+                                icon: const Icon(
+                                  Icons.delete_outline_rounded,
+                                  size: 20,
+                                  color: ShopColors.red,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              SizedBox(height: MediaQuery.viewPaddingOf(sheetContext).bottom),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _removeName(String name) async {
@@ -590,6 +748,7 @@ child: const Row(
                   category: _category,
                   subCategory: _subCategory,
                   subCategoryController: _subCategoryController,
+                  subCategories: _savedSubCategories,
                   categories: _savedCategories,
                   supplierName: _supplierName,
                   supplierController: _supplierController,
@@ -624,6 +783,22 @@ child: const Row(
                     showShopMessage(context, 'Category "$typed" saved.');
                   },
                   onCategoryRemoved: _removeCategory,
+                  onAddSubCategory: () async {
+                    final typed = _subCategory.trim();
+                    if (typed.isEmpty) {
+                      showShopMessage(
+                        context,
+                        'Type a sub category name first, then tap + to save it.',
+                      );
+                      return;
+                    }
+                    await _rememberSubCategory(typed);
+                    if (!mounted) return;
+                    if (!context.mounted) return;
+                    showShopMessage(context, 'Sub category "$typed" saved.');
+                  },
+                  onSubCategoryRemoved: _removeSubCategory,
+                  onManageSubCategories: _manageSubCategories,
                   onManageCategories: _manageCategories,
                   onNameSaved: _rememberName,
                   onNameRemoved: _removeName,
@@ -986,6 +1161,7 @@ class _ProductForm extends StatelessWidget {
     required this.category,
     required this.subCategory,
     required this.subCategoryController,
+    required this.subCategories,
     required this.categories,
     required this.supplierName,
     required this.supplierController,
@@ -1003,6 +1179,9 @@ class _ProductForm extends StatelessWidget {
     required this.onCategoryChanged,
     required this.onSubCategoryChanged,
     required this.onAddCategory,
+    required this.onAddSubCategory,
+    required this.onSubCategoryRemoved,
+    required this.onManageSubCategories,
     required this.onCategoryRemoved,
     required this.onManageCategories,
     required this.onNameSaved,
@@ -1025,6 +1204,7 @@ class _ProductForm extends StatelessWidget {
   final String category;
   final String subCategory;
   final TextEditingController subCategoryController;
+  final List<String> subCategories;
   final List<String> categories;
   final String supplierName;
   final TextEditingController supplierController;
@@ -1042,6 +1222,9 @@ class _ProductForm extends StatelessWidget {
   final ValueChanged<String> onCategoryChanged;
   final ValueChanged<String> onSubCategoryChanged;
   final VoidCallback onAddCategory;
+  final VoidCallback onAddSubCategory;
+  final ValueChanged<String> onSubCategoryRemoved;
+  final VoidCallback onManageSubCategories;
   final ValueChanged<String> onCategoryRemoved;
   final VoidCallback onManageCategories;
   final ValueChanged<String> onNameSaved;
@@ -1170,19 +1353,98 @@ fieldViewBuilder:
         _FieldHeading(
           title: 'Sub Category',
           required: false,
+          trailing: 'Manage',
+          trailingColor: ShopColors.primary,
+          onTrailingTap: onManageSubCategories,
         ),
         const SizedBox(height: 6),
-        TextField(
-          controller: subCategoryController,
-          textCapitalization: TextCapitalization.words,
-          onChanged: (value) => onSubCategoryChanged(value.trim()),
-          decoration: _formDecoration(
-            prefixIcon: const Icon(
-              Icons.subdirectory_arrow_right_rounded,
-              color: ShopColors.primary,
-              size: 21,
+        Autocomplete<String>(
+          initialValue: TextEditingValue(text: subCategory),
+          optionsBuilder: (value) {
+            final query = value.text.trim().toLowerCase();
+            if (query.isEmpty) return const Iterable<String>.empty();
+            return subCategories.where(
+              (item) => item.toLowerCase().contains(query),
+            );
+          },
+          fieldViewBuilder:
+              (
+                context,
+                textController,
+                focusNode,
+                onFieldSubmitted,
+              ) => TextField(
+                controller: textController,
+                focusNode: focusNode,
+                textCapitalization: TextCapitalization.words,
+                onChanged: (value) => onSubCategoryChanged(value.trim()),
+                decoration: _formDecoration(
+                  prefixIcon: const Icon(
+                    Icons.subdirectory_arrow_right_rounded,
+                    color: ShopColors.primary,
+                    size: 21,
+                  ),
+                  hintText: 'e.g. Running, Casual, Formal',
+                ).copyWith(
+                  suffixIcon: IconButton(
+                    padding: EdgeInsets.zero,
+                    visualDensity: VisualDensity.compact,
+                    tooltip: 'Save this sub category',
+                    onPressed: () {
+                      final name = textController.text.trim();
+                      if (name.isEmpty) {
+                        showShopMessage(
+                          context,
+                          'Type a sub category name first.',
+                        );
+                        return;
+                      }
+                      onAddSubCategory();
+                    },
+                    icon: const Icon(
+                      Icons.add_circle_outline_rounded,
+                      color: ShopColors.primary,
+                      size: 21,
+                    ),
+                  ),
+                ),
+              ),
+          optionsViewBuilder: (context, onSelected, options) => Align(
+            alignment: Alignment.topLeft,
+            child: Material(
+              elevation: 6,
+              borderRadius: BorderRadius.circular(12),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 220, maxWidth: 340),
+                child: ListView(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  children: [
+                    for (final option in options)
+                      ListTile(
+                        dense: true,
+                        leading: const Icon(
+                          Icons.bookmark_added_rounded,
+                          size: 15,
+                          color: ShopColors.primary,
+                        ),
+                        title: Text(option),
+                        trailing: IconButton(
+                          visualDensity: VisualDensity.compact,
+                          tooltip: 'Remove $option',
+                          onPressed: () => onSubCategoryRemoved(option),
+                          icon: const Icon(
+                            Icons.remove_circle_outline_rounded,
+                            size: 18,
+                            color: ShopColors.red,
+                          ),
+                        ),
+                        onTap: () => onSelected(option),
+                      ),
+                  ],
+                ),
+              ),
             ),
-            hintText: 'e.g. Running, Casual, Formal',
           ),
         ),
         const SizedBox(height: 13),
