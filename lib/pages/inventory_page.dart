@@ -479,7 +479,23 @@ class _InventoryPageState extends State<InventoryPage> with RouteAware {
                         onOpenProduct: (product) => Navigator.pushNamed(
                           context,
                           '/inventory/report',
-                          arguments: product.id,
+                          // Full product map: the report page renders
+                          // instantly from it instead of waiting on the
+                          // server (which can take a minute to wake up).
+                          arguments: {
+                            'id': product.id,
+                            'name': product.name,
+                            'category': product.category,
+                            'sub_category': product.subCategory,
+                            'sku': product.sku,
+                            'size': product.size,
+                            'color': product.color,
+                            'cost': product.cost,
+                            'price': product.price,
+                            'quantity': product.stock,
+                            'image_url': product.imageUrl,
+                            'supplier_name': product.supplierName,
+                          },
                         ),
                         onEditProduct: _editProduct,
                         onDeleteProduct: _deleteProduct,
@@ -520,7 +536,7 @@ class _InventoryPageState extends State<InventoryPage> with RouteAware {
                         onOpen: () => Navigator.pushNamed(
                           context,
                           '/inventory/report',
-                          arguments: filteredProducts[index].id,
+                          arguments: filteredProducts[index].reportArguments,
                         ),
                         onEdit: () =>
                             _editProduct(filteredProducts[index]),
@@ -960,6 +976,23 @@ class _Product {
 
   final String id;
   final String name;
+
+  /// Everything the inventory report page needs to render instantly from
+  /// route arguments, without a network round-trip.
+  Map<String, dynamic> get reportArguments => {
+        'id': id,
+        'name': name,
+        'category': category,
+        'sub_category': subCategory,
+        'sku': sku,
+        'size': size,
+        'color': color,
+        'cost': cost,
+        'price': price,
+        'quantity': stock,
+        'image_url': imageUrl,
+        'supplier_name': supplierName,
+      };
   final String category;
   final String subCategory;
   final String sku;
@@ -1015,7 +1048,11 @@ class _ProductCard extends StatelessWidget {
                       child: product.imageUrl.isNotEmpty
                           ? Image.network(
                               product.imageUrl,
-                              fit: BoxFit.cover,
+                              // Show the whole photo: the image lives in a
+                              // fixed-size grid cell, so contain cannot
+                              // trigger a layout loop the way a Wrap with
+                              // content-sized children did.
+                              fit: BoxFit.contain,
                               width: double.infinity,
                               height: double.infinity,
                               errorBuilder: (context, error, stackTrace) =>

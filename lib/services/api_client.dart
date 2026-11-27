@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -298,8 +299,19 @@ class ApiClient {
     if (body != null) request.body = jsonEncode(body);
     late final http.Response response;
     try {
-      final streamedResponse = await _httpClient.send(request);
-      response = await http.Response.fromStream(streamedResponse);
+      // Without a deadline, a cold-starting server (e.g. Render free tier)
+      // leaves the page's spinner spinning for minutes and the UI looks
+      // frozen. 30s is generous, then we surface a retryable error.
+      final streamedResponse = await _httpClient
+          .send(request)
+          .timeout(const Duration(seconds: 30));
+      response = await http.Response.fromStream(streamedResponse)
+          .timeout(const Duration(seconds: 60));
+    } on TimeoutException {
+      throw ApiException(
+        'The server took too long to respond. It may be waking up — try again.',
+        0,
+      );
     } on http.ClientException catch (error) {
       throw ApiException('The API request failed: $error', 0);
     }

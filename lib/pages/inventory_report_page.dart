@@ -26,22 +26,39 @@ class _InventoryReportPageState extends State<InventoryReportPage> {
     if (_started) return;
     _started = true;
     final arguments = ModalRoute.of(context)?.settings.arguments;
-    if (arguments is String && arguments.isNotEmpty) {
-      _productId = arguments;
+    // Two argument shapes are accepted: a bare product id (String), or the
+    // full product map sent from the inventory card. With the map we can
+    // render the whole report instantly, without waiting for the server
+    // (which on a cold Render instance can take a minute to wake up).
+    if (arguments is Map<String, dynamic> && arguments['id'] is String) {
+      _productId = arguments['id'] as String;
+      _products = [arguments];
+      _loading = false;
+      _refreshInBackground();
+    } else {
+      if (arguments is String && arguments.isNotEmpty) _productId = arguments;
+      // Defer the first load until after the build phase so we never call
+      // setState() from within didChangeDependencies (which caused a rebuild
+      // loop / freeze).
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _load();
+      });
     }
-    // Defer the first load until after the build phase so we never call
-    // setState() from within didChangeDependencies (which caused a rebuild
-    // loop / freeze).
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _load();
-    });
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _errorMessage = null;
-    });
+  void _refreshInBackground() {
+    // Best-effort refresh of an already-rendered report; failures are
+    // ignored because the page is showing the passed-in data.
+    _load(silent: true);
+  }
+
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _errorMessage = null;
+      });
+    }
     try {
       final products = await ApiClient.products();
       if (!mounted) return;
@@ -50,6 +67,8 @@ class _InventoryReportPageState extends State<InventoryReportPage> {
         _loading = false;
       });
     } on ApiException catch (error) {
+      // A silent refresh must never blank out an already-rendered report.
+      if (silent) return;
       if (mounted) {
         setState(() {
           _errorMessage = error.message;
