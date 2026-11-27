@@ -69,12 +69,24 @@ class _InventoryReportPageState extends State<InventoryReportPage> {
   int _int(Map<String, dynamic> json, String key) =>
       (json[key] as num?)?.toInt() ?? 0;
 
+  String _money(num value) {
+    final rounded = value.round();
+    final digits = rounded.abs().toString();
+    final buffer = StringBuffer();
+    for (var i = 0; i < digits.length; i++) {
+      if (i > 0 && (digits.length - i) % 3 == 0) buffer.write(',');
+      buffer.write(digits[i]);
+    }
+    return '${rounded < 0 ? '-' : ''}K$buffer';
+  }
+
   @override
   Widget build(BuildContext context) {
     final product = _product;
     return Scaffold(
       backgroundColor: ShopColors.surface,
       body: SafeArea(
+        bottom: false,
         child: Column(
           children: [
             _ReportAppBar(title: _str(product ?? const {}, 'name')),
@@ -87,15 +99,16 @@ class _InventoryReportPageState extends State<InventoryReportPage> {
                   ? const _ErrorState(
                       message: 'This product could not be found.',
                     )
-                  : _buildReport(context, product),
+                  : _buildReport(product),
             ),
+            if (product != null) _BottomActions(product: product),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildReport(BuildContext context, Map<String, dynamic> product) {
+  Widget _buildReport(Map<String, dynamic> product) {
     final name = _str(product, 'name');
     final mainCategory = _str(product, 'category').trim().isEmpty
         ? 'Uncategorized'
@@ -104,167 +117,226 @@ class _InventoryReportPageState extends State<InventoryReportPage> {
     final sku = _str(product, 'sku');
     final size = _str(product, 'size');
     final color = _str(product, 'color');
-    final supplier = _str(product, 'supplier_name');
     final imageUrl = _str(product, 'image_url');
     final cost = _num(product, 'cost');
     final price = _num(product, 'price');
     final stock = _int(product, 'quantity');
     final margin = price - cost;
-    final marginPercent = price > 0 ? margin / price * 100 : 0;
+    final marginPercent = price > 0 ? margin / price * 100 : 0.0;
     final costValue = cost * stock;
     final retailValue = price * stock;
+    final projectedProfit = retailValue - costValue;
 
-    final siblings = _products
-        .where(
-          (p) =>
-              p['id'] != product['id'] &&
-              _str(p, 'category').trim() == mainCategory &&
-              (subCategory.isEmpty
-                  ? _str(p, 'sub_category').trim().isEmpty
-                  : _str(p, 'sub_category').trim() == subCategory),
-        )
-        .toList();
+    final low = stock > 0 && stock <= 5;
+    final out = stock <= 0;
+    final statusLabel = out ? 'Out of Stock' : (low ? 'Low Stock' : 'In Stock • Healthy');
+    final statusColor = out
+        ? ShopColors.red
+        : (low ? ShopColors.orange : ShopColors.green);
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
       children: [
+        // Status + quick actions
+        Row(
+          children: [
+            _StatusChip(label: statusLabel, color: statusColor),
+            const SizedBox(width: 8),
+            const _InfoChip(label: 'POS Ready'),
+            const Spacer(),
+            _CircleAction(
+              icon: Icons.share_outlined,
+              onTap: () => showShopMessage(
+                context,
+                'Share is not available on this device.',
+              ),
+            ),
+            const SizedBox(width: 8),
+            _CircleAction(
+              icon: Icons.edit_outlined,
+              onTap: () => Navigator.pop(context),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        // Hero profile
         _HeroCard(
           name: name,
           imageUrl: imageUrl,
-          mainCategory: mainCategory,
+          category: mainCategory,
           subCategory: subCategory,
+          sku: sku,
+          price: price,
+          cost: cost,
+          margin: margin,
+          marginPercent: marginPercent,
         ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _MetricTile(
-                label: 'IN STOCK',
-                value: '$stock',
-                color: stock > 0 ? ShopColors.green : ShopColors.red,
-                icon: Icons.inventory_2_outlined,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _MetricTile(
-                label: 'RETAIL PRICE',
-                value: 'K${price.toStringAsFixed(0)}',
-                color: ShopColors.primary,
-                icon: Icons.sell_outlined,
-              ),
-            ),
-          ],
+        const SizedBox(height: 16),
+        const Text(
+          'Inventory & Capital Valuation',
+          style: TextStyle(
+            color: ShopColors.text,
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'ZMW Audit',
+          style: TextStyle(color: ShopColors.muted, fontSize: 11),
         ),
         const SizedBox(height: 10),
-        Row(
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          childAspectRatio: 1.35,
           children: [
-            Expanded(
-              child: _MetricTile(
-                label: 'COST PRICE',
-                value: 'K${cost.toStringAsFixed(0)}',
-                color: ShopColors.text,
-                icon: Icons.payments_outlined,
-              ),
+            _ValuationTile(
+              label: 'Stock on Hand',
+              value: '$stock',
+              unit: 'pcs',
+              icon: Icons.inventory_2_outlined,
+              accent: ShopColors.primary,
+              note: low ? 'Low stock — reorder soon' : 'Available to sell',
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _MetricTile(
-                label: 'MARGIN / ITEM',
-                value:
-                    'K${margin.toStringAsFixed(0)} (${marginPercent.toStringAsFixed(0)}%)',
-                color: ShopColors.green,
-                icon: Icons.trending_up_rounded,
-              ),
+            _ValuationTile(
+              label: 'Potential Revenue',
+              value: _money(retailValue),
+              icon: Icons.payments_outlined,
+              accent: ShopColors.orange,
+              note: '$stock × ${_money(price)} retail',
+            ),
+            _ValuationTile(
+              label: 'Tied Capital (Cost)',
+              value: _money(costValue),
+              icon: Icons.account_balance_wallet_outlined,
+              accent: ShopColors.muted,
+              note: '$stock pcs × ${_money(cost)} cost',
+            ),
+            _ValuationTile(
+              label: 'Projected Profit',
+              value: _money(projectedProfit),
+              icon: Icons.savings_outlined,
+              accent: ShopColors.green,
+              note: 'Gross upon complete sell',
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        _ReportCard(
+        const SizedBox(height: 16),
+        // Stock by variant
+        _Card(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Stock Value',
-                style: TextStyle(
-                  color: ShopColors.text,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 10),
-              _ValueRow(
-                label: 'Value at cost',
-                value: 'K${costValue.toStringAsFixed(0)}',
-              ),
-              _ValueRow(
-                label: 'Value at retail',
-                value: 'K${retailValue.toStringAsFixed(0)}',
-              ),
-              _ValueRow(
-                label: 'Potential profit',
-                value: 'K${(retailValue - costValue).toStringAsFixed(0)}',
-                valueColor: ShopColors.green,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        _ReportCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Product Details',
-                style: TextStyle(
-                  color: ShopColors.text,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 8),
-              _ValueRow(label: 'Main category', value: mainCategory),
-              _ValueRow(
-                label: 'Sub category',
-                value: subCategory.isEmpty ? '—' : subCategory,
-              ),
-              _ValueRow(label: 'SKU', value: sku.isEmpty ? '—' : sku),
-              _ValueRow(label: 'Size', value: size.isEmpty ? '—' : size),
-              _ValueRow(label: 'Color', value: color.isEmpty ? '—' : color),
-              _ValueRow(
-                label: 'Supplier',
-                value: supplier.isEmpty ? '—' : supplier,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        _ReportCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                subCategory.isEmpty
-                    ? 'Other products in $mainCategory'
-                    : 'Other products in $subCategory',
-                style: const TextStyle(
-                  color: ShopColors.text,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 8),
-              if (siblings.isEmpty)
-                const Text(
-                  'No other products in this group.',
-                  style: TextStyle(color: ShopColors.muted, fontSize: 12),
-                )
-              else
-                for (final sibling in siblings)
-                  _ValueRow(
-                    label: _str(sibling, 'name'),
-                    value: '${_int(sibling, 'quantity')} in stock',
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Stock by Variant',
+                      style: TextStyle(
+                        color: ShopColors.text,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                   ),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: ShopColors.pale,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '1 variant',
+                      style: const TextStyle(
+                        color: ShopColors.muted,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: ShopColors.pale,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Center(
+                        child: Text(
+                          size.isEmpty ? '—' : size,
+                          style: const TextStyle(
+                            color: ShopColors.text,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            color.isEmpty ? 'Default' : color,
+                            style: const TextStyle(
+                              color: ShopColors.text,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          Text(
+                            'SKU: ${sku.isEmpty ? '—' : sku}',
+                            style: const TextStyle(
+                              color: ShopColors.muted,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          '$stock pcs',
+                          style: TextStyle(
+                            color: out
+                                ? ShopColors.red
+                                : (low ? ShopColors.orange : ShopColors.text),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          statusLabel,
+                          style: TextStyle(
+                            color: statusColor,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -280,9 +352,9 @@ class _ReportAppBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    height: 56,
-    padding: const EdgeInsets.symmetric(horizontal: 10),
-    color: ShopColors.primary,
+    height: 60,
+    padding: const EdgeInsets.symmetric(horizontal: 8),
+    color: ShopColors.primaryContainer,
     child: Row(
       children: [
         IconButton(
@@ -290,34 +362,21 @@ class _ReportAppBar extends StatelessWidget {
           icon: const Icon(
             Icons.arrow_back_rounded,
             color: Colors.white,
-            size: 23,
+            size: 24,
           ),
           visualDensity: VisualDensity.compact,
         ),
+        const SizedBox(width: 4),
         Expanded(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Inventory Report',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: ShopColors.paleBlue,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
+          child: Text(
+            title.isEmpty ? 'Product Details' : title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
         IconButton(
@@ -329,7 +388,102 @@ class _ReportAppBar extends StatelessWidget {
           ),
           visualDensity: VisualDensity.compact,
         ),
+        const SizedBox(width: 6),
+        CircleAvatar(
+          radius: 16,
+          backgroundColor: ShopColors.primary,
+          child: IconButton(
+            padding: EdgeInsets.zero,
+            onPressed: () => Navigator.pushNamed(context, '/settings'),
+            icon: const Icon(
+              Icons.person_outline_rounded,
+              color: Colors.white,
+              size: 18,
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
       ],
+    ),
+  );
+}
+
+class _StatusChip extends StatelessWidget {
+  const _StatusChip({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: .12),
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 6,
+          height: 6,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _InfoChip extends StatelessWidget {
+  const _InfoChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+    decoration: BoxDecoration(
+      color: ShopColors.pale,
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Text(
+      label,
+      style: const TextStyle(
+        color: ShopColors.muted,
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+      ),
+    ),
+  );
+}
+
+class _CircleAction extends StatelessWidget {
+  const _CircleAction({required this.icon, required this.onTap});
+
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: ShopColors.pale,
+    shape: const CircleBorder(),
+    child: InkWell(
+      customBorder: const CircleBorder(),
+      onTap: onTap,
+      child: SizedBox(
+        width: 40,
+        height: 40,
+        child: Icon(icon, color: ShopColors.primaryContainer, size: 20),
+      ),
     ),
   );
 }
@@ -338,75 +492,194 @@ class _HeroCard extends StatelessWidget {
   const _HeroCard({
     required this.name,
     required this.imageUrl,
-    required this.mainCategory,
+    required this.category,
     required this.subCategory,
+    required this.sku,
+    required this.price,
+    required this.cost,
+    required this.margin,
+    required this.marginPercent,
   });
 
   final String name;
   final String imageUrl;
-  final String mainCategory;
+  final String category;
   final String subCategory;
+  final String sku;
+  final double price;
+  final double cost;
+  final double margin;
+  final double marginPercent;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(12),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
-      boxShadow: const [
-        BoxShadow(color: Color(0x0A192033), blurRadius: 6, offset: Offset(0, 2)),
-      ],
-    ),
-    child: Row(
+  Widget build(BuildContext context) => _Card(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            width: 84,
-            height: 84,
-            color: ShopColors.pale,
-            child: imageUrl.isNotEmpty
-                ? Image.network(
-                    imageUrl,
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) => const Icon(
-                      Icons.inventory_2_outlined,
-                      color: ShopColors.muted,
-                      size: 40,
-                    ),
-                  )
-                : const Icon(
-                    Icons.inventory_2_outlined,
-                    color: ShopColors.muted,
-                    size: 40,
-                  ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: ShopColors.text,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                width: 112,
+                height: 128,
+                color: ShopColors.pale,
+                child: imageUrl.isNotEmpty
+                    ? Image.network(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => const Icon(
+                          Icons.inventory_2_outlined,
+                          color: ShopColors.muted,
+                          size: 44,
+                        ),
+                      )
+                    : const Icon(
+                        Icons.inventory_2_outlined,
+                        color: ShopColors.muted,
+                        size: 44,
+                      ),
               ),
-              const SizedBox(height: 6),
-              Text(
-                subCategory.isEmpty
-                    ? mainCategory
-                    : '$mainCategory › $subCategory',
-                style: const TextStyle(
-                  color: ShopColors.primary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: ShopColors.primary.withValues(alpha: .1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      subCategory.isEmpty
+                          ? category.toUpperCase()
+                          : '${category.toUpperCase()} › ${subCategory.toUpperCase()}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: ShopColors.primary,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: .4,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: ShopColors.text,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    'SKU: ${sku.isEmpty ? '—' : sku}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: ShopColors.muted,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const Spacer(),
+                  const Text(
+                    'RETAIL SELLING PRICE',
+                    style: TextStyle(
+                      color: ShopColors.muted,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: .5,
+                    ),
+                  ),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text(
+                        'K${price.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          color: ShopColors.primaryContainer,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Text(
+                        '/ unit',
+                        style: TextStyle(
+                          color: ShopColors.muted,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: ShopColors.pale,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Cost Price',
+                    style: TextStyle(color: ShopColors.muted, fontSize: 12),
+                  ),
+                  Text(
+                    'K${cost.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      color: ShopColors.text,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  const Text(
+                    'Profit Margin',
+                    style: TextStyle(color: ShopColors.muted, fontSize: 12),
+                  ),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.trending_up_rounded,
+                        color: ShopColors.green,
+                        size: 17,
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        'K${margin.toStringAsFixed(2)} '
+                        '(${marginPercent.toStringAsFixed(1)}%)',
+                        style: const TextStyle(
+                          color: ShopColors.green,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ],
           ),
@@ -416,22 +689,26 @@ class _HeroCard extends StatelessWidget {
   );
 }
 
-class _MetricTile extends StatelessWidget {
-  const _MetricTile({
+class _ValuationTile extends StatelessWidget {
+  const _ValuationTile({
     required this.label,
     required this.value,
-    required this.color,
     required this.icon,
+    required this.accent,
+    required this.note,
+    this.unit,
   });
 
   final String label;
   final String value;
-  final Color color;
+  final String? unit;
   final IconData icon;
+  final Color accent;
+  final String note;
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+    padding: const EdgeInsets.all(12),
     decoration: BoxDecoration(
       color: Colors.white,
       borderRadius: BorderRadius.circular(14),
@@ -442,37 +719,74 @@ class _MetricTile extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, color: color, size: 20),
-        const SizedBox(height: 6),
-        Text(
-          label,
-          style: const TextStyle(
-            color: ShopColors.muted,
-            fontSize: 9,
-            fontWeight: FontWeight.w800,
-            letterSpacing: .4,
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: ShopColors.muted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            Container(
+              width: 26,
+              height: 26,
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: .12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: accent, size: 15),
+            ),
+          ],
         ),
-        const SizedBox(height: 2),
+        const Spacer(),
         FittedBox(
           fit: BoxFit.scaleDown,
           alignment: Alignment.centerLeft,
-          child: Text(
-            value,
-            style: TextStyle(
-              color: color,
-              fontSize: 18,
-              fontWeight: FontWeight.w900,
-            ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                value,
+                style: TextStyle(
+                  color: accent,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              if (unit != null) ...[
+                const SizedBox(width: 3),
+                Text(
+                  unit!,
+                  style: const TextStyle(
+                    color: ShopColors.muted,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ],
           ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          note,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: ShopColors.muted, fontSize: 10),
         ),
       ],
     ),
   );
 }
 
-class _ReportCard extends StatelessWidget {
-  const _ReportCard({required this.child});
+class _Card extends StatelessWidget {
+  const _Card({required this.child});
 
   final Widget child;
 
@@ -481,7 +795,7 @@ class _ReportCard extends StatelessWidget {
     padding: const EdgeInsets.all(14),
     decoration: BoxDecoration(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(15),
+      borderRadius: BorderRadius.circular(16),
       boxShadow: const [
         BoxShadow(color: Color(0x0A192033), blurRadius: 5, offset: Offset(0, 2)),
       ],
@@ -490,45 +804,67 @@ class _ReportCard extends StatelessWidget {
   );
 }
 
-class _ValueRow extends StatelessWidget {
-  const _ValueRow({
-    required this.label,
-    required this.value,
-    this.valueColor = ShopColors.text,
-  });
+class _BottomActions extends StatelessWidget {
+  const _BottomActions({required this.product});
 
-  final String label;
-  final String value;
-  final Color valueColor;
+  final Map<String, dynamic> product;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 5),
-    child: Row(
-      children: [
-        Expanded(
-          child: Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: ShopColors.muted, fontSize: 12),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Flexible(
-          child: Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.right,
-            style: TextStyle(
-              color: valueColor,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
+  Widget build(BuildContext context) => Container(
+    decoration: const BoxDecoration(
+      color: Colors.white,
+      boxShadow: [
+        BoxShadow(color: Color(0x14002E7B), blurRadius: 16, offset: Offset(0, -4)),
       ],
+    ),
+    child: SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+        child: Row(
+          children: [
+            Expanded(
+              child: SizedBox(
+                height: 50,
+                child: OutlinedButton.icon(
+                  onPressed: () => showShopMessage(
+                    context,
+                    'Open this product in the inventory list to adjust stock.',
+                  ),
+                  icon: const Icon(Icons.tune, size: 20),
+                  label: const Text('Stock Count'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: ShopColors.primaryContainer,
+                    side: const BorderSide(color: ShopColors.outline),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: SizedBox(
+                height: 50,
+                child: FilledButton.icon(
+                  onPressed: () =>
+                      Navigator.pushNamed(context, '/product/new'),
+                  icon: const Icon(Icons.add_shopping_cart, size: 20),
+                  label: const Text('Order Restock'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: ShopColors.orange,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     ),
   );
 }
